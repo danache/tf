@@ -237,7 +237,7 @@ class HourglassModel():
                 raise Exception("Unknow dimension")
 
     def train(self):
-        with tf.device('/cpu:0'):
+        with tf.device(self.gpu):
             sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 
             sess.run(tf.global_variables_initializer())
@@ -253,40 +253,38 @@ class HourglassModel():
             n_step = n_epoch * n_step_epoch
             print_freq = 1
 
-            with tf.device('/cpu:0'):
 
-                data_Generator = DataGenerator(imgdir=self.img_path, label_dir=self.label_path, out_record=self.out_record,
+
+            data_Generator = DataGenerator(imgdir=self.img_path, label_dir=self.label_path, out_record=self.out_record,
                                                batch_size=self.batchSize,scale=False)
-                img, heatmap = data_Generator.getData()
+            img, heatmap = data_Generator.getData()
 
-            with tf.device(self.gpu):
-                # with tf.name_scope('inputs'):
-                #     img = tf.placeholder(tf.float32, [None, 256, 256, 3], name='x_train')
-                #     heatmap = tf.placeholder(tf.float32, [None, opt.nStack, 64, 64, opt.partnum], name='y_train')
-                # TODO : Implement weighted loss function
-                # NOT USABLE AT THE MOMENT
-                # weights = tf.placeholder(dtype = tf.float32, shape = (None, self.nStack, 1, 1, self.outDim))
-                inputTime = time.time()
-                print('---Inputs : Done (' + str(int(abs(inputTime - startTime))) + ' sec.)')
-                self.output = self._graph_hourglass(img).outputs
-                tf.summary.image('heatmap',self.output,14)
-                graphTime = time.time()
-                print('---Graph : Done (' + str(int(abs(graphTime - inputTime))) + ' sec.)')
 
-                with tf.name_scope('loss'):
-                    self.loss = self.MSE(output=self.output, target=heatmap, is_mean=True)
-                tf.summary.scalar("loss", self.loss)
-                tf.summary.histogram("histogram", self.loss)
-                lossTime = time.time()
-                print('---Loss : Done (' + str(int(abs(graphTime - lossTime))) + ' sec.)')
+            # with tf.name_scope('inputs'):
+            #     img = tf.placeholder(tf.float32, [None, 256, 256, 3], name='x_train')
+            #     heatmap = tf.placeholder(tf.float32, [None, opt.nStack, 64, 64, opt.partnum], name='y_train')
+            # TODO : Implement weighted loss function
+            # NOT USABLE AT THE MOMENT
+            # weights = tf.placeholder(dtype = tf.float32, shape = (None, self.nStack, 1, 1, self.outDim))
+            inputTime = time.time()
+            print('---Inputs : Done (' + str(int(abs(inputTime - startTime))) + ' sec.)')
+            self.output = self._graph_hourglass(img).outputs
+            tf.summary.image('heatmap',self.output,14)
+            graphTime = time.time()
+            print('---Graph : Done (' + str(int(abs(graphTime - inputTime))) + ' sec.)')
+
+            with tf.name_scope('loss'):
+                self.loss = self.MSE(output=self.output, target=heatmap, is_mean=True)
+            tf.summary.scalar("loss", self.loss)
+            tf.summary.histogram("histogram", self.loss)
+            lossTime = time.time()
+            print('---Loss : Done (' + str(int(abs(graphTime - lossTime))) + ' sec.)')
 
             merged = tf.summary.merge_all()
             train_writer=tf.summary.FileWriter("./train",sess.graph)
 
             init = tf.group(tf.global_variables_initializer(),
                             tf.local_variables_initializer())
-            sess.run(init)
-
 
 
             with tf.name_scope('steps'):
@@ -295,10 +293,13 @@ class HourglassModel():
                 self.lr = tf.train.exponential_decay(self.learning_rate, self.train_step, self.decay_step, self.decay,
                                                      staircase=True, name='learning_rate')
 
-            with tf.device(self.gpu):
-                with tf.name_scope('rmsprop'):
-                    self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr).minimize(self.loss)
+            #with tf.device(self.gpu):
 
+            with tf.name_scope('rmsprop'):
+                self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr).minimize(self.loss)
+            sess.run(tf.global_variables_initializer())
+
+            sess.run(tf.local_variables_initializer())
             step = 0
             for epoch in range(n_epoch):
                 train_loss, train_acc, n_batch = 0, 0, 0
