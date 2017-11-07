@@ -7,12 +7,13 @@ import tensorlayer as tl
 from tensorlayer.layers import Conv2d as conv_2d
 from models.layers.Residual import Residual
 
-
+from dataGenerator.datagen import DataGenerator
 import opt
 class HourglassModel():
-    def __init__(self, nFeat=512, nStack=4, nModules=1, nLow=4, outputDim=14, batch_size=16, drop_rate=0.2,
+    def __init__(self, nFeat=512, nStack=4, nModules=1, nLow=4, outputDim=14, batch_size=2, drop_rate=0.2,
                  lear_rate=2.5e-4, decay=0.96, decay_step=2000, dataset=None, training=True, w_summary=True,
-                 logdir_train=None, logdir_test=None, tiny=True, modif=True, name='tiny_hourglass'):
+                 logdir_train=None, logdir_test=None, tiny=True, modif=True, name='tiny_hourglass',img_path="",label_path=""
+                 ,out_record="/home/dan/tf/test.tfrecords",train_num=1000):
         """ Initializer
         Args:
             nStack				: number of stacks (stage/Hourglass modules)
@@ -53,6 +54,10 @@ class HourglassModel():
         self.logdir_test = logdir_test
         self.joints = ['r_anckle', 'r_knee', 'r_hip', 'l_hip', 'l_knee', 'l_anckle', 'pelvis', 'thorax', 'neck', 'head',
                        'r_wrist', 'r_elbow', 'r_shoulder', 'l_shoulder', 'l_elbow', 'l_wrist']
+        self.img_path = img_path
+        self.label_path =label_path
+        self.out_record = out_record
+        self.train_num = 1000
 
     def get_input(self):
         """ Returns Input (Placeholder) Tensor
@@ -103,7 +108,6 @@ class HourglassModel():
         return self.saver
 
     def hourglass(self,data,n,f,name=""):
-        print("hourglassd name %s" % (name))
 
         # Upper Branch
         up_1 = Residual(data, f,f, name='%s_up_1'%(name))
@@ -186,6 +190,7 @@ class HourglassModel():
             with tf.name_scope('preprocessing'):
                 data = tl.layers.InputLayer(inputs, name='input')
                 conv1 = conv_2d(data, 64, filter_size=(6, 6), strides=(2, 2),  padding="SAME", name="conv1")
+
                 bn1 = tl.layers.BatchNormLayer(conv1, name="bn1", act=tf.nn.relu)
 
 
@@ -214,11 +219,13 @@ class HourglassModel():
                             tmpOut_ = conv_2d(tmpout,opt.nFeats,filter_size=(1, 1), strides=(1, 1),name="stage_%d_tmpOut_" % (i))
                             inter = tl.layers.ElementwiseLayer(layer=[inter,ll_,tmpOut_],
                                    combine_fn=tf.add, name="stage_%d_add_n"%(i))
-
+            #end = out[0]
+            print("out len = %s" %(len(out)))
             end = tl.layers.StackLayer(out, axis=1, name='final_output')
             #end = tl.layers.StackLayer([out])
             return end
     def MSE(self,output, target, is_mean=False):
+
         with tf.name_scope("mean_squared_error_loss"):
             if output.get_shape().ndims == 5:  # [batch_size, n_feature]
                 if is_mean:
@@ -229,36 +236,142 @@ class HourglassModel():
             else:
                 raise Exception("Unknow dimension")
 
+    def train(self):
+        with tf.device('/cpu:0'):
+            sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 
+            sess.run(tf.global_variables_initializer())
+
+            sess.run(tf.local_variables_initializer())
+
+            coord = tf.train.Coordinator()
+            threads = tf.train.start_queue_runners(coord=coord, sess=sess)
+
+            startTime = time.time()
+            n_epoch = 200
+            n_step_epoch = int(self.train_num / self.batchSize)
+            n_step = n_epoch * n_step_epoch
+            print_freq = 1
+
+            with tf.device('/cpu:0'):
+
+                data_Generator = DataGenerator(imgdir=self.img_path, label_dir=self.label_path, out_record=self.out_record,
+                                               batch_size=self.batchSize,scale=False)
+                img, heatmap = data_Generator.getData()
+
+            with tf.device(self.gpu):
+                # with tf.name_scope('inputs'):
+                #     img = tf.placeholder(tf.float32, [None, 256, 256, 3], name='x_train')
+                #     heatmap = tf.placeholder(tf.float32, [None, opt.nStack, 64, 64, opt.partnum], name='y_train')
+                # TODO : Implement weighted loss function
+                # NOT USABLE AT THE MOMENT
+                # weights = tf.placeholder(dtype = tf.float32, shape = (None, self.nStack, 1, 1, self.outDim))
+                inputTime = time.time()
+                print('---Inputs : Done (' + str(int(abs(inputTime - startTime))) + ' sec.)')
+                self.output = self._graph_hourglass(img).outputs
+                tf.summary.image('heatmap',self.output,14)
+                graphTime = time.time()
+                print('---Graph : Done (' + str(int(abs(graphTime - inputTime))) + ' sec.)')
+
+                with tf.name_scope('loss'):
+                    self.loss = self.MSE(output=self.output, target=heatmap, is_mean=True)
+                tf.summary.scalar("loss", self.loss)
+                tf.summary.histogram("histogram", self.loss)
+                lossTime = time.time()
+                print('---Loss : Done (' + str(int(abs(graphTime - lossTime))) + ' sec.)')
+
+            merged = tf.summary.merge_all()
+            train_writer=tf.summary.FileWriter("./train",sess.graph)
+
+            init = tf.group(tf.global_variables_initializer(),
+                            tf.local_variables_initializer())
+            sess.run(init)
+
+
+
+            with tf.name_scope('steps'):
+                self.train_step = tf.Variable(0, name='global_step', trainable=False)
+            with tf.name_scope('lr'):
+                self.lr = tf.train.exponential_decay(self.learning_rate, self.train_step, self.decay_step, self.decay,
+                                                     staircase=True, name='learning_rate')
+
+            with tf.device(self.gpu):
+                with tf.name_scope('rmsprop'):
+                    self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr)
+
+            step = 0
+            for epoch in range(n_epoch):
+                train_loss, train_acc, n_batch = 0, 0, 0
+                print("epoch % d" % epoch  )
+                for s in range(n_step_epoch):
+                    ## You can also use placeholder to feed_dict in data after using
+                    # val, l = sess.run([x_train_batch, y_train_batch])
+                    # tl.visualize.images2d(val, second=3, saveable=False, name='batch', dtype=np.uint8, fig_idx=2020121)
+                    # err, ac, _ = sess.run([cost, acc, train_op], feed_dict={x_crop: val, y_: l})
+                    print("epoch % d step : % d" % (epoch,s))
+                    err = sess.run([self.loss])
+
+                    step += 1
+                    train_loss += err
+
+                    n_batch += 1
+                train_writer.add_summary(epoch, train_loss)
+                if epoch + 1 == 1 or (epoch + 1) % print_freq == 0:
+                    print("Epoch %d : Step %d-%d of %d took %fs" % (
+                    epoch, step, step + n_step_epoch, n_step, time.time() - startTime))
+                    print("   train loss: %f" % (train_loss / n_batch))
+                    print("   train acc: %f" % (train_acc / n_batch))
+
+                    # test_loss, test_acc, n_batch = 0, 0, 0
+                    # for _ in range(int(len(y_test) / batch_size)):
+                    #     err, ac = sess.run([cost_test, acc_test])
+                    #     test_loss += err;
+                    #     test_acc += ac;
+                    #     n_batch += 1
+                    # print("   test loss: %f" % (test_loss / n_batch))
+                    # print("   test acc: %f" % (test_acc / n_batch))
+
+                if (epoch + 1) % (print_freq * 50) == 0:
+                    print("Save model " + "!" * 10)
+                    saver = tf.train.Saver()
+                    save_path = saver.save(sess, "model_test_advanced.ckpt")
+
+            coord.request_stop()
+            coord.join(threads)
+            sess.close()
+
+"""
     def generate_model(self):
-        """ Create the complete graph
-        """
+
         startTime = time.time()
+        sess = tf.InteractiveSession()
+
         print('CREATE MODEL:')
         with tf.device(self.gpu):
             with tf.name_scope('inputs'):
-                # Shape Input Image - batchSize: None, height: 256, width: 256, channel: 3 (RGB)
-                self.img = tf.placeholder(dtype=tf.float32, shape=(None, 256, 256, 3), name='input_img')
-                # Shape Ground Truth Map: batchSize x nStack x 64 x 64 x outDim
-                self.gtMaps = tf.placeholder(dtype=tf.float32, shape=(None, self.nStack, 64, 64, self.outDim))
+                img = tf.placeholder(tf.float32, [None, 256, 256, 3], name='x_train')
+                heatmap = tf.placeholder(tf.float32, [None,opt.nStack, 64, 64, opt.partnum], name='y_train')
             # TODO : Implement weighted loss function
             # NOT USABLE AT THE MOMENT
             # weights = tf.placeholder(dtype = tf.float32, shape = (None, self.nStack, 1, 1, self.outDim))
             inputTime = time.time()
             print('---Inputs : Done (' + str(int(abs(inputTime - startTime))) + ' sec.)')
-            self.output = self._graph_hourglass(self.img).outputs
+            self.output = self._graph_hourglass(img).outputs
             graphTime = time.time()
             print('---Graph : Done (' + str(int(abs(graphTime - inputTime))) + ' sec.)')
             
             with tf.name_scope('loss'):
-                self.loss = self.MSE(output=self.output, target=self.gtMaps, is_mean=True)
+                self.loss = self.MSE(output=self.output, target=heatmap, is_mean=True)
             lossTime = time.time()
             print('---Loss : Done (' + str(int(abs(graphTime - lossTime))) + ' sec.)')
         with tf.device(self.cpu):
+
             with tf.name_scope('accuracy'):
                 self._accuracy_computation()
+
             accurTime = time.time()
             print('---Acc : Done (' + str(int(abs(accurTime - lossTime))) + ' sec.)')
+
             with tf.name_scope('steps'):
                 self.train_step = tf.Variable(0, name='global_step', trainable=False)
             with tf.name_scope('lr'):
@@ -271,12 +384,19 @@ class HourglassModel():
                 self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr)
             optimTime = time.time()
             print('---Optim : Done (' + str(int(abs(optimTime - lrTime))) + ' sec.)')
+
             with tf.name_scope('minimizer'):
                 self.update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
                 with tf.control_dependencies(self.update_ops):
                     self.train_rmsprop = self.rmsprop.minimize(self.loss, self.train_step)
             minimTime = time.time()
             print('---Minimizer : Done (' + str(int(abs(optimTime - minimTime))) + ' sec.)')
+
+
+
+
+
+
         self.init = tf.global_variables_initializer()
         initTime = time.time()
         print('---Init : Done (' + str(int(abs(initTime - minimTime))) + ' sec.)')
@@ -294,3 +414,4 @@ class HourglassModel():
         print('Model created (' + str(int(abs(endTime - startTime))) + ' sec.)')
         del endTime, startTime, initTime, optimTime, minimTime, lrTime, accurTime, lossTime, graphTime, inputTime
 
+"""

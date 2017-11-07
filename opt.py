@@ -1,6 +1,6 @@
 ##################
 nFeats = 256
-nStack = 8
+nStack = 4
 nModules = 1
 
 LR = 2.5e-4

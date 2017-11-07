@@ -9,14 +9,14 @@ import scipy.misc as scm
 import tensorflow as tf
 import pandas as pd
 import tensorlayer as tl
-
+import opt
 """
 自定义数据生成器，包括生成tfrecord,数据增强，迭代器等。
 对于不同的数据集,根据图片数据集不同改写。
 """
 class DataGenerator():
     def __init__(self, imgdir=None, label_dir=None, out_record=None, resize=256,scale=0.25, flipping=False,
-                 color_jitting=30,rotate=30):
+                 color_jitting=30,rotate=30,batch_size=32):
         if os.path.exists(out_record):
             self.record_path = out_record
         else:
@@ -27,10 +27,17 @@ class DataGenerator():
         self.flipping = flipping
         self.color_jitting = color_jitting
         self.rorate = rotate
+        self.batch_size = batch_size
 
+    def getData(self):
+        return self.read_and_decode(filename=self.record_path,img_size=self.resize,flipping=True,scale=self.scale,
+                                    color_jitting=True,rotate=self.rorate, batch_size=self.batch_size)
 
+    def _bytes_feature(self,value):
+        return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
     # def augment(self,):
     #     #包括resize to size, scaling ,fliping, color jitting, rotate,
+
     def generageRecord(self,imgdir, label_tmp, out_record, extension=0.3, resize=256):
         writer = tf.python_io.TFRecordWriter(out_record)
         for index, row in label_tmp.iterrows():
@@ -80,8 +87,9 @@ class DataGenerator():
                 # print(ankle)
 
                 tmp = cv2.resize(human, newsize)
+                new_img = np.zeros((resize, resize, 3))
                 if (tmp.shape[0] < resize):  # 高度不够，需要补0。则要对item[6:]中的第二个值进行修改
-                    new_img = np.zeros((resize, resize, 3))
+
                     up = np.int((resize - tmp.shape[0]) * 0.5)
                     down = np.int((resize + tmp.shape[0]) * 0.5)
                     new_img[up:down, :, :] = tmp
@@ -89,21 +97,26 @@ class DataGenerator():
                         if j % 3 == 1:
                             ankle[j] = (tmp.shape[0] * ankle[j] * 1. + 0.5 * (resize - tmp.shape[0])) / resize
                 elif (tmp.shape[1] < resize):
-                    new_img = np.zeros((resize, resize, 3))
                     left = np.int((resize - tmp.shape[1]) * 0.5)
                     right = np.int((resize + tmp.shape[1]) * 0.5)
                     new_img[:, left:right, :] = tmp
                     for j in range(len(ankle)):
                         if j % 3 == 0:
                             ankle[j] = (tmp.shape[1] * ankle[j] * 1. + 0.5 * (resize - tmp.shape[1])) / resize
+                            # print(ankle)
+                            #             for j in range(14):
+                            #                 coord = ankle[j * 3: j * 3 + 2]
+                            #                 if coord[-1] != 2:
+                            #                     human = cv2.circle(new_img,(int(coord[0] * resize),int(coord[1]* resize)),10,(255,0,255),-1)
+                new_img = new_img.astype(np.int8)
 
-                img_raw = new_img.tobytes()
-                label_raw = np.array(ankle).tobytes()
-                example = tf.train.Example(features=tf.train.Features(feature={
-                    "label": tf.train.Feature(bytes_list=tf.train.BytesList(value=[label_raw])),
-                    'img_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[img_raw]))
-                }))
+                feature = {'label': self._bytes_feature(tf.compat.as_bytes(np.array(ankle).astype(np.float32).tostring()))
+                    , 'img_raw': self._bytes_feature(tf.compat.as_bytes(new_img.tostring()))}
+
+                example = tf.train.Example(features=tf.train.Features(feature=feature))
                 writer.write(example.SerializeToString())
+            if index > 0:
+                break
             writer.close()
         return None
 
@@ -155,28 +168,37 @@ class DataGenerator():
                 lambda: self._makeGaussian(height, width, s, center=(tf.cast(x * 64, tf.int32), tf.cast(y * 64, tf.int32))),
                 lambda: self.planB(height, width)
             )
+            ht = tf.expand_dims(ht, -1)
             hm.append(ht)
 
         return hm
 
-    def read_and_decode(self, img_size=256, label_size=42, heatmap_size=64, scale=0.25, flipping=False,
-                        color_jitting=True, rotate=30):
+    def read_and_decode(self,filename, img_size=256, label_size=42, heatmap_size=64, scale=0.25, flipping=False,
+                        color_jitting=True, rotate=30,batch_size=32):
 
-        filename_queue = tf.train.string_input_producer([self.record_path])
+        feature = {'img_raw': tf.FixedLenFeature([], tf.string),
+                   'label': tf.FixedLenFeature([], tf.string)}
+        # Create a list of filenames and pass it to a queue
+        filename_queue = tf.train.string_input_producer([filename])
+        # Define a reader and read the next record
+
         reader = tf.TFRecordReader()
-        _, serialized_example = reader.read(filename_queue)  # 返回文件名和文件
-        features = tf.parse_single_example(serialized_example,
-                                           features={
-                                               'label': tf.FixedLenFeature([], tf.string),
-                                               'img_raw': tf.FixedLenFeature([], tf.string),
-                                           })
-        img = tf.decode_raw(features['img_raw'], tf.float64)
-        img = tf.reshape(img, [img_size, img_size, 3])
+        _, serialized_example = reader.read(filename_queue)
 
-        label = tf.decode_raw(features['label'], tf.float64)
+        # Decode the record read by the reader
+        features = tf.parse_single_example(serialized_example, features=feature)
+        # Convert the image data from string back to the numbers
+
+        img = tf.decode_raw(features['img_raw'], tf.float32)
+
+        # Cast label data into int32
+        # label = tf.cast(features['label'],tf.float32)
+        # Reshape image data into the original shape
+        img = tf.reshape(img, (img_size, img_size, 3))
+
+        label = tf.decode_raw(features['label'], tf.float32)
         label = tf.reshape(label, [label_size, ])
 
-        img = tf.cast(img, tf.float32) * (1. / 255) - 0.5
         """
         Data augmention
         """
@@ -186,25 +208,47 @@ class DataGenerator():
             img = tf.image.resize_images(img, (img_scale_size, img_scale_size), method=tf.image.ResizeMethod.BICUBIC)
 
         heatmap = self.generateHeatMap(heatmap_size, heatmap_size, label, label_size / 3, heatmap_size * 1.)
+        repeat = []
+
 
         ###rotate
         if rotate:
-            img = tf.contrib.image.rotate(img, angles=rotate)
+            rotate_angle = random.uniform(-rotate*1./360, rotate*1./360) * np.pi
+            #ex_angle = np.pi / 8
+            #print(rotate_angle)
+            img = tf.contrib.image.rotate(img, angles=rotate_angle)
             for i in range(len(heatmap)):
-                heatmap[i] = tf.contrib.image.rotate(heatmap[i], angles=rotate)
+                heatmap[i] = tf.contrib.image.rotate(heatmap[i], angles=rotate_angle)
         ###flip
         if flipping:
             if (random.random() > 0.5):
-                img = tf.image.random_flip_left_right(img)
+                img = tf.image.flip_left_right(img)
                 for i in range(len(heatmap)):
-                    heatmap[i] = tf.image.random_flip_left_right(heatmap[i])
+                    heatmap[i] = tf.image.flip_left_right(heatmap[i])
         if color_jitting:
             ###color_jitting
             img = tf.image.random_hue(img, max_delta=0.05)
             img = tf.image.random_contrast(img, lower=0.3, upper=1.0)
             img = tf.image.random_brightness(img, max_delta=0.2)
             img = tf.image.random_saturation(img, lower=0.0, upper=2.0)
+        #img = img.astype(tf.float64)
+        for i in range(len(heatmap)):
+            heatmap[i] = tf.squeeze(heatmap[i])
+        heatmap = tf.stack(heatmap,axis=-1)
+        for i in range(opt.nStack):
+            repeat.append(heatmap)
+        heatmap = tf.stack(repeat, axis=0)
+        if batch_size:
+            min_after_dequeue = 10
+            capacity = min_after_dequeue + 4 * batch_size
+            image, ht = tf.train.shuffle_batch([img, heatmap],
+                                                  batch_size=batch_size,
+                                                  num_threads=4,
+                                                  capacity=capacity,
+                                                  min_after_dequeue=min_after_dequeue)
+
+            return image, ht
+        else:
+            return img,label
 
 
-            #     return img,label
-        return img, heatmap

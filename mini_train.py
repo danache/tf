@@ -13,7 +13,7 @@ from four_stack.Hourglass import HourglassModel
 
 
 model = HourglassModel()
-model.generate_model()
+model.train()
 #model.training_init(nEpochs=params['nepochs'], epochSize=params['epoch_size'], saveStep=params['saver_step'],
 #                    dataset=None)
 
