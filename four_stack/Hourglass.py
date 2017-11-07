@@ -10,7 +10,7 @@ from models.layers.Residual import Residual
 from dataGenerator.datagen import DataGenerator
 import opt
 class HourglassModel():
-    def __init__(self, nFeat=512, nStack=4, nModules=1, nLow=4, outputDim=14, batch_size=2, drop_rate=0.2,
+    def __init__(self, nFeat=512, nStack=4, nModules=1, nLow=4, outputDim=14, batch_size=1, drop_rate=0.2,
                  lear_rate=2.5e-4, decay=0.96, decay_step=2000, dataset=None, training=True, w_summary=True,
                  logdir_train=None, logdir_test=None, tiny=True, modif=True, name='tiny_hourglass',img_path="",label_path=""
                  ,out_record="/home/dan/tf/test.tfrecords",train_num=1000):
@@ -297,7 +297,7 @@ class HourglassModel():
 
             with tf.device(self.gpu):
                 with tf.name_scope('rmsprop'):
-                    self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr)
+                    self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr).minimize(self.loss)
 
             step = 0
             for epoch in range(n_epoch):
@@ -309,8 +309,8 @@ class HourglassModel():
                     # tl.visualize.images2d(val, second=3, saveable=False, name='batch', dtype=np.uint8, fig_idx=2020121)
                     # err, ac, _ = sess.run([cost, acc, train_op], feed_dict={x_crop: val, y_: l})
                     print("epoch % d step : % d" % (epoch,s))
-                    err = sess.run([self.loss])
-
+                    err = sess.run([self.rmsprop])
+                    print("123")
                     step += 1
                     train_loss += err
 
