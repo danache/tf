@@ -4,14 +4,14 @@ import numpy as np
 import sys
 
 import tensorlayer as tl
-from four_stack.conv import conv_2d
-
+#from four_stack.conv import conv_2d
+from tensorlayer.layers import Conv2d as conv_2d
 from models.layers.Residual import Residual
 
 from dataGenerator.datagen import DataGenerator
 import opt
 
-import metric.pck
+#import metric.pck
 
 
 class HourglassModel():
@@ -221,24 +221,29 @@ class HourglassModel():
 
     def train(self, nEpochs=10, saveStep=500, validIter=10):
 
-        n_epoch = nEpochs
-        n_step_epoch = int(self.train_num / self.batchSize)
-        n_step = n_epoch * n_step_epoch
-        print_freq = 1
+
 
         generate_time = time.time()
 
         train_data = DataGenerator(imgdir=self.train_img_path, label_dir=self.train_label_path,
                                    out_record=self.train_record,
                                    batch_size=self.batchSize, scale=False, is_valid=False, name="train")
-        train_img, train_heatmap = train_data.getData()
-        valid_data = DataGenerator(imgdir=self.valid_img_path, label_dir=self.valid_label_path,
-                                   out_record=self.valid_record,
-                                   batch_size=self.batchSize, scale=False, is_valid=True, name="valid")
-        valid_img, valid_coord = valid_data.getData()
 
         self.train_num = train_data.getN()
-        self.valid_num = valid_data.getN()
+        train_img, train_heatmap = train_data.getData()
+        n_epoch = nEpochs
+        n_step_epoch = int(self.train_num / self.batchSize)
+        n_step = n_epoch * n_step_epoch
+        print_freq = 1
+        if self.valid_img_path:
+            valid_data = DataGenerator(imgdir=self.valid_img_path, label_dir=self.valid_label_path,
+                                       out_record=self.valid_record,
+                                       batch_size=self.batchSize, scale=False, is_valid=True, name="valid")
+            valid_img, valid_coord = valid_data.getData()
+            self.valid_num = valid_data.getN()
+
+
+
         # img, heatmap = data_Generator.getData()
 
         print('data generate in ' + str(int(time.time() - generate_time)) + ' sec.')
@@ -306,11 +311,11 @@ class HourglassModel():
                     sys.stdout.flush()
 
                     if n_batch % saveStep == 0:
-                        _, lo, summary = self.Session.run([self.rmsprop, self.loss, merged])
+                        _, lo, summary = self.Session.run([self.train_rmsprop, self.loss, merged])
                         train_writer.add_summary(summary, epoch * n_step_epoch + n_batch)
                         train_writer.flush()
                     else:
-                        _, lo = self.Session.run([self.rmsprop, self.loss])
+                        _, lo = self.Session.run([self.train_rmsprop, self.loss])
                     loss += lo
                     avg_cost += lo / n_step_epoch
             epochfinishTime = time.time()
@@ -358,9 +363,9 @@ class HourglassModel():
         """
         if (self.logdir_train == None) or (self.logdir_test == None):
             raise ValueError('Train/Test directory not assigned')
-        else:
-            with tf.device(self.cpu):
-                self.saver = tf.train.Saver()
+        # else:
+        #     with tf.device(self.cpu):
+        #         self.saver = tf.train.Saver()
                 # if summary:
                 #     with tf.device(self.gpu):
                 #         self.train_summary = tf.summary.FileWriter(self.logdir_train, tf.get_default_graph())

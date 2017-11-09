@@ -2,8 +2,6 @@ import tensorflow as tf
 import tensorlayer as tl
 from tensorlayer.layers import Conv2d as conv_2d
 
-from tflearn.layers.core import dropout, flatten, fully_connected, input_data
-from tflearn.activations import relu
 def convBlock(data,numIN, numOut, name = ""):
     with tf.variable_scope(name):
         bn1 = tl.layers.BatchNormLayer(data, name="bn1",act=tf.nn.relu)

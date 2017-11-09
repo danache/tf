@@ -16,10 +16,12 @@ import opt
 """
 class DataGenerator():
     def __init__(self, imgdir=None, label_dir=None, out_record=None, resize=256,scale=0.25, flipping=False,
-                 color_jitting=30,rotate=30,batch_size=32):
+                 color_jitting=30,rotate=30,batch_size=32,is_valid=False,name=""):
         if os.path.exists(out_record):
+            print("record file exist!!")
             self.record_path = out_record
         else:
+            print("record file not exist!  creating !!!")
             self.generageRecord(imgdir, label_dir, out_record, extension=0.3, resize=256)
             self.record_path = out_record
         self.resize = resize
@@ -28,10 +30,13 @@ class DataGenerator():
         self.color_jitting = color_jitting
         self.rorate = rotate
         self.batch_size = batch_size
+        self.number = 1000
 
     def getData(self):
         return self.read_and_decode(filename=self.record_path,img_size=self.resize,flipping=True,scale=self.scale,
                                     color_jitting=True,rotate=self.rorate, batch_size=self.batch_size)
+    def getN(self):
+        return self.number
 
     def _bytes_feature(self,value):
         return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
@@ -40,6 +45,7 @@ class DataGenerator():
 
     def generageRecord(self,imgdir, label_tmp, out_record, extension=0.3, resize=256):
         writer = tf.python_io.TFRecordWriter(out_record)
+        label_tmp = pd.read_json(label_tmp)
         for index, row in label_tmp.iterrows():
             anno = row["human_annotations"]
             #         if(len(anno.keys())  == 1):
@@ -108,15 +114,17 @@ class DataGenerator():
                             #                 coord = ankle[j * 3: j * 3 + 2]
                             #                 if coord[-1] != 2:
                             #                     human = cv2.circle(new_img,(int(coord[0] * resize),int(coord[1]* resize)),10,(255,0,255),-1)
-                new_img = new_img.astype(np.int8)
+                new_img = new_img.astype(np.uint8)
 
-                feature = {'label': self._bytes_feature(tf.compat.as_bytes(np.array(ankle).astype(np.float32).tostring()))
+                feature = {'label': self._bytes_feature(tf.compat.as_bytes(np.array(ankle).astype(np.float64).tostring()))
                     , 'img_raw': self._bytes_feature(tf.compat.as_bytes(new_img.tostring()))}
 
                 example = tf.train.Example(features=tf.train.Features(feature=feature))
                 writer.write(example.SerializeToString())
-            if index > 0:
+            if index > 1000:
                 break
+            if index % 100 == 0:
+                print("creating -- %d" % (index))
             writer.close()
         return None
 
@@ -189,14 +197,14 @@ class DataGenerator():
         features = tf.parse_single_example(serialized_example, features=feature)
         # Convert the image data from string back to the numbers
 
-        img = tf.decode_raw(features['img_raw'], tf.float32)
+        img = tf.decode_raw(features['img_raw'], tf.uint8)
 
         # Cast label data into int32
         # label = tf.cast(features['label'],tf.float32)
         # Reshape image data into the original shape
         img = tf.reshape(img, (img_size, img_size, 3))
 
-        label = tf.decode_raw(features['label'], tf.float32)
+        label = tf.decode_raw(features['label'], tf.float64)
         label = tf.reshape(label, [label_size, ])
 
         """
@@ -238,6 +246,8 @@ class DataGenerator():
         for i in range(opt.nStack):
             repeat.append(heatmap)
         heatmap = tf.stack(repeat, axis=0)
+        img = tf.cast(img,tf.float32)
+        img = tf.divide(img,255)
         if batch_size:
             min_after_dequeue = 10
             capacity = min_after_dequeue + 4 * batch_size

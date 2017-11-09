@@ -4,7 +4,7 @@ from models.layers.Residual import *
 import tensorflow as tf
 import tensorlayer as tl
 from tensorlayer.layers import Conv2d as conv_2d
-from tflearn.activations import relu,sigmoid
+
 import numpy as np
 import opt
 def repResidual(data, num, nRep,name=""):
