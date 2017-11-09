@@ -219,7 +219,9 @@ class HourglassModel():
             else:
                 raise Exception("Unknow dimension")
 
+
     def train(self, nEpochs=10, saveStep=500, validIter=10):
+
 
 
 
@@ -228,6 +230,7 @@ class HourglassModel():
         train_data = DataGenerator(imgdir=self.train_img_path, label_dir=self.train_label_path,
                                    out_record=self.train_record,
                                    batch_size=self.batchSize, scale=False, is_valid=False, name="train")
+
 
         self.train_num = train_data.getN()
         train_img, train_heatmap = train_data.getData()
@@ -293,7 +296,11 @@ class HourglassModel():
             coord = tf.train.Coordinator()
             threads = tf.train.start_queue_runners(coord=coord, sess=self.Session)
             self.Session.run(init)
-            step = 0
+
+            #with tf.device(self.gpu):
+
+            with tf.name_scope('rmsprop'):
+                self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr).minimize(self.loss)
 
             for epoch in range(nEpochs):
                 epochstartTime = time.time()
