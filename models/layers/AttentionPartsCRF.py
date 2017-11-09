@@ -1,7 +1,7 @@
 import tensorflow as tf
 import tensorlayer as tl
 from tensorlayer.layers import Conv2d as conv_2d
-from tflearn.activations import sigmoid
+
 import numpy as np
 import opt
 
