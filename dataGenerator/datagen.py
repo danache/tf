@@ -17,20 +17,27 @@ import opt
 class DataGenerator():
     def __init__(self, imgdir=None, label_dir=None, out_record=None, resize=256,scale=0.25, flipping=False,
                  color_jitting=30,rotate=30,batch_size=32,is_valid=False,name=""):
-        if os.path.exists(out_record):
-            print("record file exist!!")
-            self.record_path = out_record
-        else:
-            print("record file not exist!  creating !!!")
-            self.generageRecord(imgdir, label_dir, out_record, extension=0.3, resize=256)
-            self.record_path = out_record
+
         self.resize = resize
         self.scale = scale
         self.flipping = flipping
         self.color_jitting = color_jitting
         self.rorate = rotate
         self.batch_size = batch_size
-        self.number = 1000
+        self.name = name
+        if os.path.exists(out_record):
+            print(out_record)
+            print("record file exist!!")
+            self.record_path = out_record
+            txt = open(name + ".txt","r")
+
+            for line in txt.readlines():
+                self.number = int(line.strip())
+
+        else:
+            print(self.name + "record file not exist!  creating !!!")
+            self.generageRecord(imgdir, label_dir, out_record, extension=0.3, resize=256)
+            self.record_path = out_record
 
     def getData(self):
         return self.read_and_decode(filename=self.record_path,img_size=self.resize,flipping=True,scale=self.scale,
@@ -44,7 +51,9 @@ class DataGenerator():
     #     #包括resize to size, scaling ,fliping, color jitting, rotate,
 
     def generageRecord(self,imgdir, label_tmp, out_record, extension=0.3, resize=256):
+        print(label_tmp)
         writer = tf.python_io.TFRecordWriter(out_record)
+        self.number = 0
         label_tmp = pd.read_json(label_tmp)
         for index, row in label_tmp.iterrows():
             anno = row["human_annotations"]
@@ -121,11 +130,14 @@ class DataGenerator():
 
                 example = tf.train.Example(features=tf.train.Features(feature=feature))
                 writer.write(example.SerializeToString())
-            if index > 1000:
-                break
+                self.number += 1
+
             if index % 100 == 0:
                 print("creating -- %d" % (index))
-            writer.close()
+        writer.close()
+        txt = open(self.name + ".txt","w")
+        txt.write(str(self.number))
+        txt.close()
         return None
 
     def _makeGaussian(self,height, width, sigma=3., center=None, flag=True):
@@ -239,15 +251,15 @@ class DataGenerator():
             img = tf.image.random_contrast(img, lower=0.3, upper=1.0)
             img = tf.image.random_brightness(img, max_delta=0.2)
             img = tf.image.random_saturation(img, lower=0.0, upper=2.0)
-        #img = img.astype(tf.float64)
         for i in range(len(heatmap)):
             heatmap[i] = tf.squeeze(heatmap[i])
         heatmap = tf.stack(heatmap,axis=-1)
         for i in range(opt.nStack):
             repeat.append(heatmap)
         heatmap = tf.stack(repeat, axis=0)
-        img = tf.cast(img,tf.float32)
-        img = tf.divide(img,255)
+        img = tf.cast(img, tf.float32)
+        img = tf.divide(img, 255)
+
         if batch_size:
             min_after_dequeue = 10
             capacity = min_after_dequeue + 4 * batch_size
