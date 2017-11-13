@@ -17,7 +17,7 @@ class HourglassModel():
                  logdir_train="./log/train/", logdir_test="./log/test/", tiny=True, modif=True, name='tiny_hourglass',
                  train_img_path="", train_label_path="", train_record="",
                  valid_img_path="", valid_label_path="", valid_record="",
-                 model_dir=""
+                 model_dir="",resume=""
                  ):
         """ Initializer
         Args:
@@ -69,6 +69,7 @@ class HourglassModel():
         self.model_dir = model_dir
         self.train_num = 1000
         self.valid_num = 1000
+        self.resume = resume
 
     def get_input(self):
         """ Returns Input (Placeholder) Tensor
@@ -118,90 +119,90 @@ class HourglassModel():
         """
         return self.saver
 
-    def hourglass(self, data, n, f, name=""):
+    def hourglass(self, data, n, f, name="",reuse=False):
+        with tf.variable_scope(name, reuse=reuse):
+            # Upper Branch
+            up_1 = Residual(data, f, f, name='%s_up_1' % (name),reuse=reuse)
+            # Lower Branch
+            low_ = tl.layers.MaxPool2d(data, (2, 2), strides=(2, 2), name='%s_pool1' % (name))
+            low_1 = Residual(low_, f, f, name='%s_low_1' % (name),reuse=reuse)
 
-        # Upper Branch
-        up_1 = Residual(data, f, f, name='%s_up_1' % (name))
-        # Lower Branch
-        low_ = tl.layers.MaxPool2d(data, (2, 2), strides=(2, 2), name='%s_pool1' % (name))
-        low_1 = Residual(low_, f, f, name='%s_low_1' % (name))
+            if n > 0:
+                low_2 = self.hourglass(low_1, n - 1, f, name='%s_low_2' % (name),reuse=reuse)
+            else:
+                low_2 = Residual(low_1, f, f, name='%s_low_2' % (name),reuse=reuse)
 
-        if n > 0:
-            low_2 = self.hourglass(low_1, n - 1, f, name='%s_low_2' % (name))
-        else:
-            low_2 = Residual(low_1, f, f, name='%s_low_2' % (name))
+            low_3 = Residual(low_2, f, f, name='%s_low_3' % (name),reuse=reuse)
+            up_2 = tl.layers.UpSampling2dLayer(low_3, size=[2, 2], is_scale=True, method=1, name="%s_Upsample" % (name))
 
-        low_3 = Residual(low_2, f, f, name='%s_low_3' % (name))
-        up_2 = tl.layers.UpSampling2dLayer(low_3, size=[2, 2], is_scale=True, method=1, name="%s_Upsample" % (name))
+            return tl.layers.ElementwiseLayer(layer=[up_1, up_2],
+                                              combine_fn=tf.add, name="%s_add_n" % (name))
 
-        return tl.layers.ElementwiseLayer(layer=[up_1, up_2],
-                                          combine_fn=tf.add, name="%s_add_n" % (name))
-
-    def lin(self, data, numOut, name=None):
-        with tf.variable_scope(name) as scope:
+    def lin(self, data, numOut, name=None,reuse=False):
+        with tf.variable_scope(name,reuse=reuse) as scope:
             conv1 = conv_2d(data, numOut, filter_size=(1, 1), strides=(1, 1),
                             name='conv1')
             bn1 = tl.layers.BatchNormLayer(conv1, act=tf.nn.relu, name="bn1")
 
             return bn1
 
-    def _graph_hourglass(self, inputs):
+    def _graph_hourglass(self, inputs,reuse=False):
         """Create the Network
         Args:
             inputs : TF Tensor (placeholder) of shape (None, 256, 256, 3) #TODO : Create a parameter for customize size
         """
         with tf.device(self.gpu):
-            with tf.name_scope('model'):
-                with tf.name_scope('preprocessing'):
-                    data = tl.layers.InputLayer(inputs, name='input')
-                    with tf.name_scope('train'):
-                        tf.summary.histogram('data', data.outputs, collections=['train'])
+            with tf.variable_scope("model", reuse=reuse):
+                tl.layers.set_name_reuse(reuse)
+                data = tl.layers.InputLayer(inputs, name='input')
+                with tf.name_scope('train'):
+                    tf.summary.histogram('data', data.outputs, collections=['train'])
 
-                    conv1 = conv_2d(data, 64, filter_size=(6, 6), strides=(2, 2), padding="SAME", name="conv1")
+                conv1 = conv_2d(data, 64, filter_size=(6, 6), strides=(2, 2), padding="SAME", name="conv1")
 
-                    bn1 = tl.layers.BatchNormLayer(conv1, name="bn1", act=tf.nn.relu)
-                    with tf.name_scope('train'):
-                        tf.summary.histogram("conv1_bn/weight", conv1.all_params[0], collections=['train'])
-                        tf.summary.histogram('conv1_bn', bn1.outputs, collections=['train'])
-                    r1 = Residual(bn1, 64, 128, name="Residual1")
-                    with tf.name_scope('train'):
-                        tf.summary.histogram('residual1', r1.outputs, collections=['train'])
+                bn1 = tl.layers.BatchNormLayer(conv1, name="bn1", act=tf.nn.relu)
+                with tf.name_scope('train'):
+                    tf.summary.histogram("conv1_bn/weight", conv1.all_params[0], collections=['train'])
+                    tf.summary.histogram('conv1_bn', bn1.outputs, collections=['train'])
+                r1 = Residual(bn1, 64, 128, name="Residual1",reuse=reuse)
+                with tf.name_scope('train'):
+                    tf.summary.histogram('residual1', r1.outputs, collections=['train'])
 
-                    pool = tl.layers.MaxPool2d(r1, (2, 2), strides=(2, 2), name="pool1")
+                pool = tl.layers.MaxPool2d(r1, (2, 2), strides=(2, 2), name="pool1")
 
-                    r2 = Residual(pool, 128, 128, name="Residual2")
-                    with tf.name_scope('train'):
-                        tf.summary.histogram('residual2', r2.outputs, collections=['train'])
-                    r3 = Residual(r2, 128, opt.nFeats, name="Residual3")
-                    with tf.name_scope('train'):
-                        tf.summary.histogram('residual3', r3.outputs, collections=['train'])
+                r2 = Residual(pool, 128, 128, name="Residual2",reuse=reuse)
+                with tf.name_scope('train'):
+                    tf.summary.histogram('residual2', r2.outputs, collections=['train'])
+                r3 = Residual(r2, 128, opt.nFeats, name="Residual3",reuse=reuse)
+                with tf.name_scope('train'):
+                    tf.summary.histogram('residual3', r3.outputs, collections=['train'])
                         # return r3
                 # Storage Table
 
                 out = []
                 inter = r3
-                with tf.name_scope('stacks'):
-                    for i in range(self.nStack):
-                        with tf.name_scope('stage_%d' % (i)):
-                            hg = self.hourglass(inter, n=4, f=opt.nFeats, name="stage_%d_hg" % (i))
+            with tf.variable_scope("stack", reuse=reuse):
+                for i in range(self.nStack):
+                    with tf.name_scope('stage_%d' % (i)):
+                        hg = self.hourglass(inter, n=4, f=opt.nFeats, name="stage_%d_hg" % (i),reuse=reuse)
 
-                            r1 = Residual(hg, opt.nFeats, opt.nFeats, name="stage_%d_Residual1" % (i))
-                            ll = self.lin(r1, opt.nFeats, name="stage_%d_lin1" % (i))
-                            tmpout = conv_2d(ll, opt.partnum, filter_size=(1, 1), strides=(1, 1),
-                                             name="stage_%d_tmpout" % (i))
-                            out.append(tmpout)
-                            if i < self.nStack - 1:
-                                ll_ = conv_2d(ll, opt.nFeats, filter_size=(1, 1), strides=(1, 1),
-                                              name="stage_%d_ll_" % (i))
-                                tmpOut_ = conv_2d(tmpout, opt.nFeats, filter_size=(1, 1), strides=(1, 1),
-                                                  name="stage_%d_tmpOut_" % (i))
-                                inter = tl.layers.ElementwiseLayer(layer=[inter, ll_, tmpOut_],
-                                                                   combine_fn=tf.add, name="stage_%d_add_n" % (i))
+                        tmpr1 = Residual(hg, opt.nFeats, opt.nFeats, name="stage_%d_Residual1" % (i))
+                        ll = self.lin(tmpr1, opt.nFeats, name="stage_%d_lin1" % (i),reuse=reuse)
+                        tmpout = conv_2d(ll, opt.partnum, filter_size=(1, 1), strides=(1, 1),
+                                         name="stage_%d_tmpout" % (i))
+                        out.append(tmpout)
+                        if i < self.nStack - 1:
+                            ll_ = conv_2d(ll, opt.nFeats, filter_size=(1, 1), strides=(1, 1),
+                                          name="stage_%d_ll_" % (i))
+                            tmpOut_ = conv_2d(tmpout, opt.nFeats, filter_size=(1, 1), strides=(1, 1),
+                                              name="stage_%d_tmpOut_" % (i))
+                            inter = tl.layers.ElementwiseLayer(layer=[inter, ll_, tmpOut_],
+                                                               combine_fn=tf.add, name="stage_%d_add_n" % (i))
 
-                # end = out[0]
-                end = tl.layers.StackLayer(out, axis=1, name='final_output')
-                # end = tl.layers.StackLayer([out])
-                return end
+            # end = out[0]
+            end = tl.layers.StackLayer(out, axis=1, name='final_output')
+            # end = tl.layers.StackLayer([out])
+            return end
 
     def MSE(self, output, target, is_mean=False):
         print(output.get_shape())
@@ -218,14 +219,15 @@ class HourglassModel():
                 raise Exception("Unknow dimension")
 
 
-    def train(self, nEpochs=10, saveStep=500):
+    def train(self, nEpochs=10, saveStep=10):
+        #####参数定义
         self.resume = {}
         self.resume['accur'] = []
         self.resume['loss'] = []
         self.resume['err'] = []
 
         generate_time = time.time()
-
+        #####生成训练数据
         train_data = DataGenerator(imgdir=self.train_img_path, label_dir=self.train_label_path,
                                    out_record=self.train_record,
                                    batch_size=self.batchSize, scale=False, is_valid=False, name="train")
@@ -233,11 +235,9 @@ class HourglassModel():
 
         self.train_num = train_data.getN()
         train_img, train_heatmap = train_data.getData()
-        n_epoch = nEpochs
-        n_step_epoch = int(self.train_num / self.batchSize)
 
-        n_step = n_epoch * n_step_epoch
-        print_freq = 1
+        n_step_epoch = int(self.train_num / self.batchSize)
+        #####生成验证数据
         if self.valid_img_path:
             valid_data = DataGenerator(imgdir=self.valid_img_path, label_dir=self.valid_label_path,
                                        out_record=self.valid_record,
@@ -246,14 +246,9 @@ class HourglassModel():
             self.valid_num = valid_data.getN()
             validIter = int(self.valid_num / self.batchSize)
 
-
-
         print('data generate in ' + str(int(time.time() - generate_time)) + ' sec.')
-
-        # sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+        print("train num is %d, valid num is %d" %(self.train_num, self.valid_num))
         with tf.device(self.gpu):
-
-
             self.Session.run(tf.global_variables_initializer())
 
             self.Session.run(tf.local_variables_initializer())
@@ -261,10 +256,10 @@ class HourglassModel():
 
             self.train_output = self._graph_hourglass(train_img)
             if self.valid_img_path:
-                self.valid_output = self._graph_hourglass(valid_img)
+                self.valid_output = self._graph_hourglass(valid_img,reuse=True)
 
             graphTime = time.time()
-
+            #####生成loss
             print('Graph build in ' + str(int(generate_time - graphTime)) + ' sec.')
             with tf.name_scope('loss'):
                 # self.loss = tf.contrib.losses.mean_squared_error(self.output,heatmap)
@@ -275,16 +270,16 @@ class HourglassModel():
 
             if self.valid_img_path:
                 with tf.name_scope('acc'):
-                    self.acc = accuracy_computation(self.valid_output,valid_ht,batch_size=self.batchSize,nstack=self.nStack)
+                    self.acc = accuracy_computation(self.valid_output.outputs,valid_ht,batch_size=self.batchSize,nstack=self.nStack)
                 with tf.name_scope('valid'):
-                    tf.summary.scalar("valid_loss", self.acc, collections=['valid'])
+                    tf.summary.histogram("valid_loss", self.acc, collections=['test'])
 
             with tf.name_scope('train'):
                 tf.summary.scalar("train_loss", self.loss, collections=['train'])
 
 
             merged = tf.summary.merge_all('train')
-            valid_merge = tf.summary.merge_all('valid')
+            valid_merge = tf.summary.merge_all('test')
             train_writer = tf.summary.FileWriter("./log/train.log", self.Session.graph)
             valid_writer = tf.summary.FileWriter("./log/valid.log")
 
@@ -309,18 +304,22 @@ class HourglassModel():
             coord = tf.train.Coordinator()
             threads = tf.train.start_queue_runners(coord=coord, sess=self.Session)
             self.Session.run(init)
-
+            with tf.device(self.cpu):
+                self.saver = tf.train.Saver()
             #with tf.device(self.gpu):
 
             with tf.name_scope('rmsprop'):
                 self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr).minimize(self.loss)
+
+            if self.resume is not None:
+                self.saver.restore(self.Session, self.resume)
 
             for epoch in range(nEpochs):
                 epochstartTime = time.time()
                 print('Epoch :' + str(epoch) + '/' + str(nEpochs) + '\n')
                 loss = 0
                 avg_cost = 0.
-                for n_batch in range(n_step_epoch):
+                for n_batch in range(n_step_epoch):#n_step_epoch
                     percent = ((n_batch + 1) / n_step_epoch) * 100
                     num = np.int(20 * percent / 100)
                     tToEpoch = int((time.time() - epochstartTime) * (100 - percent) / (percent))
@@ -344,17 +343,21 @@ class HourglassModel():
                     ((epochfinishTime - epochstartTime) / n_step_epoch))[:4] + ' sec.')
                 with tf.name_scope('save'):
                     self.saver.save(self.Session, os.path.join(self.model_dir,self.name + '_' + str(epoch + 1)))
-                accuracy_array = np.array([0.0] * len(opt.partnum))
+                accuracy_array = np.zeros([1,14])
                 self.resume['loss'].append(loss)
+
+                #####valid
                 if self.valid_img_path:
-                    for i in range(validIter):
-                        accuracy_pred = self.Session.run([accuracy_pred])
+                    for i in range(validIter):#validIter
+                        accuracy_pred = self.Session.run([self.acc])
+                        #print(np.array(accuracy_pred).shape)
                         accuracy_array += np.array(accuracy_pred, dtype=np.float32) / validIter
                     print('--Avg. Accuracy =', str((np.sum(accuracy_array) / len(accuracy_array)) * 100)[:6], '%')
                     self.resume['accur'].append(accuracy_pred)
                     self.resume['err'].append(np.sum(accuracy_array) / len(accuracy_array))
                     valid_summary = self.Session.run([valid_merge])
-                    valid_writer.add_summary(valid_summary)
+                    #print(valid_summary)
+                    valid_writer.add_summary(valid_summary[0],epoch)
                     valid_writer.flush()
 
 
@@ -366,7 +369,7 @@ class HourglassModel():
             self.Session.close()
             print('Training Done')
 
-    def training_init(self, nEpochs=10, saveStep=500, dataset=None, load=None):
+    def training_init(self, nEpochs=10, saveStep=10):
         """ Initialize the training
         Args:
             nEpochs		: Number of Epochs to train
@@ -378,32 +381,12 @@ class HourglassModel():
         with tf.name_scope('Session'):
             with tf.device(self.gpu):
                 self._init_weight()
-                self._define_saver_summary()
 
-                if load is not None:
-                    self.saver.restore(self.Session, load)
                 # try:
                 #	self.saver.restore(self.Session, load)
                 # except Exception:
                 #	print('Loading Failed! (Check README file for further information)')
                 self.train(nEpochs, saveStep)
-
-    def _define_saver_summary(self, summary=True):
-        """ Create Summary and Saver
-        Args:
-            logdir_train		: Path to train summary directory
-            logdir_test		: Path to test summary directory
-        """
-        if (self.logdir_train == None) or (self.logdir_test == None):
-            raise ValueError('Train/Test directory not assigned')
-        # else:
-            with tf.device(self.cpu):
-                self.saver = tf.train.Saver()
-                #if summary:
-                #     with tf.device(self.gpu):
-                #         self.train_summary = tf.summary.FileWriter(self.logdir_train, tf.get_default_graph())
-                #         self.test_summary = tf.summary.FileWriter(self.logdir_test)
-                #         # self.weight_summary = tf.summary.FileWriter(self.logdir_train, tf.get_default_graph())
 
     def _init_weight(self):
         """ Initialize weights

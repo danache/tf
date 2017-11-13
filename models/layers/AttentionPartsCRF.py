@@ -5,17 +5,17 @@ from tensorlayer.layers import Conv2d as conv_2d
 import numpy as np
 import opt
 
-def replicate(input, numIn, dim, name):
-    with tf.variable_scope(name) as scope:
+def replicate(input, numIn, dim, name,reuse=False):
+    with tf.variable_scope(name,reuse=reuse) as scope:
         repeat = []
         for i in range(numIn):
             repeat.append(input)
         return tl.layers.ConcatLayer(repeat, dim)
 
 
-def AttentionIter(data, numin,lrnSize, iterSize,name=""):
+def AttentionIter(data, numin,lrnSize, iterSize,name="",reuse=False):
     lsigmoid = lambda x: tf.nn.sigmoid(x)
-    with tf.variable_scope(name) as scope:
+    with tf.variable_scope(name,reuse=reuse) as scope:
         U = conv_2d(data, 1, filter_size=(3, 3), padding='SAME',name="conv1")
 
         C = []
@@ -37,24 +37,26 @@ def AttentionIter(data, numin,lrnSize, iterSize,name=""):
             Q_tmp.outputs = lsigmoid(Q_tmp.outputs)
             Q.append(Q_tmp)
 
-        replicat = replicate(Q[iterSize - 1], numin, -1,name='_replicate')  # ******Q[itersize]-->Q[itersize-1]  2-->3
+        replicat = replicate(Q[iterSize - 1], numin, -1,name='_replicate',reuse=reuse)  # ******Q[itersize]-->Q[itersize-1]  2-->3
         pheat = tl.layers.ElementwiseLayer(layer=[data, replicat],
                                    combine_fn=tf.multiply, name="%s_add_layer" % (name))
 
         return pheat
 
 
-def AttentionPartsCRF(data,numin,lrnSize, iterSize, usepart,name=""):
+def AttentionPartsCRF(data,numin,lrnSize, iterSize, usepart,name="",reuse=False):
 
     if usepart == 0:
-        return AttentionIter(data,numin,lrnSize,iterSize=iterSize,name="%s_Attention"%(name))
+        return AttentionIter(data,numin,lrnSize,iterSize=iterSize,name="%s_Attention"%(name),reuse=reuse)
     else:
-        partnum = opt.partnum
-        pre = []
-        for i in range(partnum):
-            att = AttentionIter(data=data,numin=numin,lrnSize=lrnSize, iterSize=iterSize,name="%s_Attention_%d"%(name,i))
-            tmpconv = conv_2d(att,  1, filter_size=(1,1), name='%s_conv_%d' % (name,i))
-            pre.append(tmpconv)
 
-        return tl.layers.ConcatLayer(pre, -1)
+        with tf.variable_scope(name, reuse=reuse) as scope:
+            partnum = opt.partnum
+            pre = []
+            for i in range(partnum):
+                att = AttentionIter(data=data,numin=numin,lrnSize=lrnSize, iterSize=iterSize,name="%s_Attention_%d"%(name,i),reuse=reuse)
+                tmpconv = conv_2d(att,  1, filter_size=(1,1), name='%s_conv_%d' % (name,i))
+                pre.append(tmpconv)
+
+            return tl.layers.ConcatLayer(pre, -1)
         #return mx.symbol.concat(data=pre, dim=-1)

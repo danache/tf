@@ -2,8 +2,8 @@ import tensorflow as tf
 import tensorlayer as tl
 from tensorlayer.layers import Conv2d as conv_2d
 
-def convBlock(data,numIN, numOut, name = ""):
-    with tf.variable_scope(name):
+def convBlock(data,numIN, numOut, name = "",reuse=False):
+    with tf.variable_scope(name,reuse=reuse):
         bn1 = tl.layers.BatchNormLayer(data, name="bn1",act=tf.nn.relu)
         conv1 = conv_2d(bn1,numOut / 2,filter_size=(1,1), name="conv1")
 
@@ -17,15 +17,15 @@ def convBlock(data,numIN, numOut, name = ""):
 
         return conv3
 
-def skipLayer(data,numin, numOut,name=""):
+def skipLayer(data,numin, numOut,name="",reuse=False):
     if numin == numOut:
         return data
     else:
-        with tf.variable_scope(name):
+        with tf.variable_scope(name,reuse=reuse):
             return conv_2d(data,numOut,filter_size=(1,1),strides=(1,1),name="conv")
 
-def poolLayer(data, numOut,name="",suffix=""):
-    with tf.variable_scope(name):
+def poolLayer(data, numOut,name="",suffix="",reuse=False):
+    with tf.variable_scope(name,reuse=reuse):
         bn1 = tl.layers.BatchNormLayer(data, name="bn1",act=tf.nn.relu)
 
         pool1 = tl.layers.MaxPool2d(bn1, (2,2),strides=(2,2),name='pool1' )
@@ -41,11 +41,11 @@ def poolLayer(data, numOut,name="",suffix=""):
         x = tl.layers.UpSampling2dLayer(conv2,size=[2,2],is_scale=True, method=1,name="upsample")
         return x
 
-def ResidualPool(data,numin, numOut,name=""):
-
-    convb = convBlock(data,numin,numOut, name="%s_conv_block"%(name))
-    skip = skipLayer(data, numin,numOut, name="%s_skip_layer"%(name))
-    pool = poolLayer(data,numOut, name="%s_pool_layer"%(name))
-    x = tl.layers.ElementwiseLayer(layer=[convb,skip,pool],
-                                   combine_fn=tf.add, name="%s_add_layer" % (name))
-    return x
+def ResidualPool(data,numin, numOut,name="",reuse=False):
+    with tf.variable_scope(name, reuse=reuse):
+        convb = convBlock(data,numin,numOut, name="%s_conv_block"%(name))
+        skip = skipLayer(data, numin,numOut, name="%s_skip_layer"%(name))
+        pool = poolLayer(data,numOut, name="%s_pool_layer"%(name))
+        x = tl.layers.ElementwiseLayer(layer=[convb,skip,pool],
+                                       combine_fn=tf.add, name="%s_add_layer" % (name))
+        return x
