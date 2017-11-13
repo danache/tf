@@ -54,11 +54,13 @@ class HourglassModel():
         self.modif = modif
         self.dataset = dataset
         self.cpu = '/cpu:0'
-        self.gpu = '/gpu:1'
+        self.gpu = ['/gpu:1']
         self.logdir_train = logdir_train
         self.logdir_test = logdir_test
-        self.joints = ['r_anckle', 'r_knee', 'r_hip', 'l_hip', 'l_knee', 'l_anckle', 'pelvis', 'thorax', 'neck', 'head',
-                       'r_wrist', 'r_elbow', 'r_shoulder', 'l_shoulder', 'l_elbow', 'l_wrist']
+        self.joints = [u"左小腿",u"左大腿",u"左连线",u"右连线",u"右大腿",u"右小腿",u"头和脖子",
+                                u"左肩",u"左大臂",u"左小臂",u"右肩",u"右大臂",u"右小臂"]
+        self.joints = ["rShoulder", "rElbow", "rWrist", "lShoulder", "lElbow", "lWrist", "rhip","rknee","rankle",
+                       "lhip","lknee","lankle","head","neck"]
         self.train_img_path = train_img_path
         self.train_label_path = train_label_path
         self.train_record = train_record
@@ -69,7 +71,7 @@ class HourglassModel():
         self.model_dir = model_dir
         self.train_num = 1000
         self.valid_num = 1000
-        self.resume = resume
+        self.cont = resume
 
     def get_input(self):
         """ Returns Input (Placeholder) Tensor
@@ -151,7 +153,8 @@ class HourglassModel():
         Args:
             inputs : TF Tensor (placeholder) of shape (None, 256, 256, 3) #TODO : Create a parameter for customize size
         """
-        with tf.device(self.gpu):
+
+        with tf.device(self.gpu[0]):
             with tf.variable_scope("model", reuse=reuse):
                 tl.layers.set_name_reuse(reuse)
                 data = tl.layers.InputLayer(inputs, name='input')
@@ -218,25 +221,15 @@ class HourglassModel():
             else:
                 raise Exception("Unknow dimension")
 
-
-    def train(self, nEpochs=10, saveStep=10):
-        #####参数定义
-        self.resume = {}
-        self.resume['accur'] = []
-        self.resume['loss'] = []
-        self.resume['err'] = []
-
+    def generateModel(self):
         generate_time = time.time()
         #####生成训练数据
         train_data = DataGenerator(imgdir=self.train_img_path, label_dir=self.train_label_path,
                                    out_record=self.train_record,
                                    batch_size=self.batchSize, scale=False, is_valid=False, name="train")
 
-
         self.train_num = train_data.getN()
         train_img, train_heatmap = train_data.getData()
-
-        n_step_epoch = int(self.train_num / self.batchSize)
         #####生成验证数据
         if self.valid_img_path:
             valid_data = DataGenerator(imgdir=self.valid_img_path, label_dir=self.valid_label_path,
@@ -244,121 +237,120 @@ class HourglassModel():
                                        batch_size=self.batchSize, scale=False, is_valid=True, name="valid")
             valid_img, valid_ht = valid_data.getData()
             self.valid_num = valid_data.getN()
-            validIter = int(self.valid_num / self.batchSize)
-
+            self.validIter = int(self.valid_num / self.batchSize)
         print('data generate in ' + str(int(time.time() - generate_time)) + ' sec.')
-        print("train num is %d, valid num is %d" %(self.train_num, self.valid_num))
-        with tf.device(self.gpu):
-            self.Session.run(tf.global_variables_initializer())
+        print("train num is %d, valid num is %d" % (self.train_num, self.valid_num))
 
-            self.Session.run(tf.local_variables_initializer())
-            tl.layers.initialize_global_variables(self.Session)
 
+
+        with tf.device(self.gpu[0]):
             self.train_output = self._graph_hourglass(train_img)
             if self.valid_img_path:
-                self.valid_output = self._graph_hourglass(valid_img,reuse=True)
-
-            graphTime = time.time()
-            #####生成loss
-            print('Graph build in ' + str(int(generate_time - graphTime)) + ' sec.')
+                self.valid_output = self._graph_hourglass(valid_img, reuse=True)
             with tf.name_scope('loss'):
-                # self.loss = tf.contrib.losses.mean_squared_error(self.output,heatmap)
-                self.loss = self.MSE(output=self.train_output.outputs, target=train_heatmap, is_mean=True)  # +\
+                self.loss = self.MSE(output=self.train_output.outputs, target=train_heatmap, is_mean=True)
 
-                # self.loss =  tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.output.outputs, labels= heatmap), name = 'cross_entropy_loss')
-                # tf.contrib.layers.l2_regularizer(0.01)(self.output.all_params[0]) + tf.contrib.layers.l2_regularizer(0.01)(self.output.all_params[2])
+        if self.valid_img_path:
+            with tf.name_scope('acc'):
+                self.acc = accuracy_computation(self.valid_output.outputs, valid_ht, batch_size=self.batchSize,
+                                              nstack=self.nStack)
+            with tf.name_scope('test'):
+                for i in range(opt.partnum):
+                    tf.summary.scalar(self.joints[i],self.acc[i], collections = ['test'])
+        with tf.name_scope('train'):
+            tf.summary.scalar("train_loss", self.loss, collections=['train'])
 
-            if self.valid_img_path:
-                with tf.name_scope('acc'):
-                    self.acc = accuracy_computation(self.valid_output.outputs,valid_ht,batch_size=self.batchSize,nstack=self.nStack)
-                with tf.name_scope('valid'):
-                    tf.summary.histogram("valid_loss", self.acc, collections=['test'])
-
-            with tf.name_scope('train'):
-                tf.summary.scalar("train_loss", self.loss, collections=['train'])
-
-
-            merged = tf.summary.merge_all('train')
-            valid_merge = tf.summary.merge_all('test')
-            train_writer = tf.summary.FileWriter("./log/train.log", self.Session.graph)
-            valid_writer = tf.summary.FileWriter("./log/valid.log")
-
-            lossTime = time.time()
-            print('---Loss : Done (' + str(int(abs(graphTime - lossTime))) + ' sec.)')
-
+        with tf.name_scope('Session'):
             with tf.name_scope('steps'):
                 self.train_step = tf.Variable(0, name='global_step', trainable=False)
-            with tf.name_scope('lr'):
-                self.lr = tf.train.exponential_decay(self.learning_rate, self.train_step, self.decay_step, self.decay,
-                                                     staircase=True, name='learning_rate')
-            with tf.name_scope('rmsprop'):
-                self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr)
-            with tf.name_scope('minimizer'):
-                self.update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-                with tf.control_dependencies(self.update_ops):
-                    self.train_rmsprop = self.rmsprop.minimize(self.loss, self.train_step)
+        with tf.name_scope('lr'):
+            self.lr = tf.train.exponential_decay(self.learning_rate, self.train_step, self.decay_step, self.decay,
+                                                 staircase=True, name='learning_rate')
+        with tf.name_scope('rmsprop'):
+            self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr)
+        with tf.name_scope('minimizer'):
+            self.update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            with tf.control_dependencies(self.update_ops):
+                self.train_rmsprop = self.rmsprop.minimize(self.loss, self.train_step)
 
-            init = tf.group(tf.global_variables_initializer(),
-                            tf.local_variables_initializer())
+        # with tf.device(self.cpu):
+        #     with tf.name_scope('training'):
+        #         tf.summary.scalar('loss', self.loss, collections=['train'])
+        #         tf.summary.scalar('learning_rate', self.lr, collections=['train'])
+        #     with tf.name_scope('summary'):
+        #         for i in range(len(self.joints)):
+        #             tf.summary.scalar(self.joints[i], self.joint_accur[i], collections=['train', 'test'])
 
-            coord = tf.train.Coordinator()
-            threads = tf.train.start_queue_runners(coord=coord, sess=self.Session)
-            self.Session.run(init)
-            with tf.device(self.cpu):
-                self.saver = tf.train.Saver()
-            #with tf.device(self.gpu):
 
-            with tf.name_scope('rmsprop'):
-                self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr).minimize(self.loss)
+        self.merged = tf.summary.merge_all('train')
+        self.valid_merge = tf.summary.merge_all('test')
 
-            if self.resume is not None:
-                self.saver.restore(self.Session, self.resume)
 
-            for epoch in range(nEpochs):
-                epochstartTime = time.time()
-                print('Epoch :' + str(epoch) + '/' + str(nEpochs) + '\n')
-                loss = 0
-                avg_cost = 0.
-                for n_batch in range(n_step_epoch):#n_step_epoch
-                    percent = ((n_batch + 1) / n_step_epoch) * 100
-                    num = np.int(20 * percent / 100)
-                    tToEpoch = int((time.time() - epochstartTime) * (100 - percent) / (percent))
-                    sys.stdout.write(
-                        '\r Train: {0}>'.format("=" * num) + "{0}>".format(" " * (20 - num)) + '||' + str(percent)[
-                                                                                                      :4] + '%' + ' -cost: ' + str(
-                            loss)[:6] + ' -avg_loss: ' + str(avg_cost)[:5] + ' -timeToEnd: ' + str(tToEpoch) + ' sec.')
-                    sys.stdout.flush()
 
-                    if n_batch % saveStep == 0:
-                        _, lo, summary = self.Session.run([self.train_rmsprop, self.loss, merged])
-                        train_writer.add_summary(summary, epoch * n_step_epoch + n_batch)
-                        train_writer.flush()
-                    else:
-                        _, lo = self.Session.run([self.train_rmsprop, self.loss])
-                    loss += lo
-                    avg_cost += lo / n_step_epoch
-                epochfinishTime = time.time()
-                print('Epoch ' + str(epoch) + '/' + str(nEpochs) + ' done in ' + str(
-                    int(epochfinishTime - epochstartTime)) + ' sec.' + ' -avg_time/batch: ' + str(
-                    ((epochfinishTime - epochstartTime) / n_step_epoch))[:4] + ' sec.')
-                with tf.name_scope('save'):
-                    self.saver.save(self.Session, os.path.join(self.model_dir,self.name + '_' + str(epoch + 1)))
-                accuracy_array = np.zeros([1,14])
-                self.resume['loss'].append(loss)
 
-                #####valid
-                if self.valid_img_path:
-                    for i in range(validIter):#validIter
-                        accuracy_pred = self.Session.run([self.acc])
-                        #print(np.array(accuracy_pred).shape)
-                        accuracy_array += np.array(accuracy_pred, dtype=np.float32) / validIter
-                    print('--Avg. Accuracy =', str((np.sum(accuracy_array) / len(accuracy_array)) * 100)[:6], '%')
-                    self.resume['accur'].append(accuracy_pred)
-                    self.resume['err'].append(np.sum(accuracy_array) / len(accuracy_array))
-                    valid_summary = self.Session.run([valid_merge])
-                    #print(valid_summary)
-                    valid_writer.add_summary(valid_summary[0],epoch)
-                    valid_writer.flush()
+    def train(self, nEpochs=10, saveStep=10):
+        #####参数定义
+        self.resume = {}
+        self.resume['accur'] = []
+        self.resume['loss'] = []
+        self.resume['err'] = []
+        n_step_epoch = int(self.train_num / self.batchSize)
+        self.train_writer = tf.summary.FileWriter("./log/train.log", self.Session.graph)
+        self.valid_writer = tf.summary.FileWriter("./log/valid.log")
+        init = tf.group(tf.global_variables_initializer(),
+                        tf.local_variables_initializer())
+
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(coord=coord, sess=self.Session)
+        self.Session.run(init)
+
+        #with tf.device(self.gpu):
+
+        for epoch in range(20,nEpochs):
+            epochstartTime = time.time()
+            print('Epoch :' + str(epoch) + '/' + str(nEpochs) + '\n')
+            loss = 0
+            avg_cost = 0.
+            for n_batch in range(n_step_epoch):#n_step_epoch
+                percent = ((n_batch + 1) / n_step_epoch) * 100
+                num = np.int(20 * percent / 100)
+                tToEpoch = int((time.time() - epochstartTime) * (100 - percent) / (percent))
+                sys.stdout.write(
+                    '\r Train: {0}>'.format("=" * num) + "{0}>".format(" " * (20 - num)) + '||' + str(percent)[
+                                                                                                  :4] + '%' + ' -cost: ' + str(
+                        loss)[:6] + ' -avg_loss: ' + str(avg_cost)[:5] + ' -timeToEnd: ' + str(tToEpoch) + ' sec.')
+                sys.stdout.flush()
+
+                if n_batch % saveStep == 0:
+                    _, lo, summary = self.Session.run([self.train_rmsprop, self.loss, self.merged])
+                    self.train_writer.add_summary(summary, epoch * n_step_epoch + n_batch)
+                    self.train_writer.flush()
+                else:
+                    _, lo = self.Session.run([self.train_rmsprop, self.loss])
+                loss += lo
+                avg_cost += lo / n_step_epoch
+            epochfinishTime = time.time()
+            print('Epoch ' + str(epoch) + '/' + str(nEpochs) + ' done in ' + str(
+                int(epochfinishTime - epochstartTime)) + ' sec.' + ' -avg_time/batch: ' + str(
+                ((epochfinishTime - epochstartTime) / n_step_epoch))[:4] + ' sec.')
+            with tf.name_scope('save'):
+                self.saver.save(self.Session, os.path.join(self.model_dir,self.name + '_' + str(epoch + 1)))
+            accuracy_array = np.zeros([1,14])
+            self.resume['loss'].append(loss)
+
+            #####valid
+            if self.valid_img_path:
+                for i in range(self.validIter):#self.validIter
+                    accuracy_pred = self.Session.run([self.acc])
+                    #print(np.array(accuracy_pred).shape)
+                    accuracy_array += np.array(accuracy_pred, dtype=np.float32) / self.validIter
+                print('--Avg. Accuracy =', str((np.sum(accuracy_array) / len(accuracy_array)))[:6], )
+                self.resume['accur'].append(accuracy_pred)
+                self.resume['err'].append(np.sum(accuracy_array) / len(accuracy_array))
+                valid_summary = self.Session.run([self.valid_merge])
+
+                self.valid_writer.add_summary(valid_summary[0],epoch)
+                self.valid_writer.flush()
 
 
 
@@ -379,19 +371,24 @@ class HourglassModel():
             load			: Model to load (None if training from scratch) (see README for further information)
         """
         with tf.name_scope('Session'):
-            with tf.device(self.gpu):
-                self._init_weight()
+            for i in self.gpu:
+                with tf.device(i):
 
-                # try:
-                #	self.saver.restore(self.Session, load)
-                # except Exception:
-                #	print('Loading Failed! (Check README file for further information)')
-                self.train(nEpochs, saveStep)
+                    self._init_weight()
+                    self.saver = tf.train.Saver()
+                    if self.cont:
+
+                        self.saver.restore(self.Session, self.cont)
+                    self.train(nEpochs, saveStep)
 
     def _init_weight(self):
         """ Initialize weights
         """
         print('Session initialization')
         self.Session = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
-        t_start = time.time()
-        print('Sess initialized in ' + str(int(time.time() - t_start)) + ' sec.')
+
+        self.Session.run(tf.global_variables_initializer())
+
+        self.Session.run(tf.local_variables_initializer())
+        tl.layers.initialize_global_variables(self.Session)
+        print("init done")

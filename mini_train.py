@@ -21,6 +21,7 @@ valid_record = "/media/bnrc2/_backup/ai/mu/valid.tfrecords"
 model = HourglassModel(train_img_path=train_img_path,train_label_path=label_dir,train_record=train_record,
                        valid_img_path=valid_img_path, valid_label_path=valid_label, valid_record=valid_record,
                        model_dir="/media/bnrc2/_backup/golf/model/",resume="/media/bnrc2/_backup/golf/resume/tiny_hourglass_19")
+model.generateModel()
 model.training_init(nEpochs=200)
 #model.training_init(nEpochs=params['nepochs'], epochSize=params['epoch_size'], saveStep=params['saver_step'],
 #                    dataset=None)
