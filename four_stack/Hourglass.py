@@ -285,9 +285,6 @@ class HourglassModel():
         self.merged = tf.summary.merge_all('train')
         self.valid_merge = tf.summary.merge_all('test')
 
-
-
-
     def train(self, nEpochs=10, saveStep=10):
         #####参数定义
         self.resume = {}
@@ -306,7 +303,7 @@ class HourglassModel():
 
         #with tf.device(self.gpu):
 
-        for epoch in range(20,nEpochs):
+        for epoch in range(21,nEpochs):
             epochstartTime = time.time()
             print('Epoch :' + str(epoch) + '/' + str(nEpochs) + '\n')
             loss = 0
@@ -352,14 +349,12 @@ class HourglassModel():
                 self.valid_writer.add_summary(valid_summary[0],epoch)
                 self.valid_writer.flush()
 
+        coord.request_stop()
 
-
-            coord.request_stop()
-
-            # Wait for threads to finish.
-            coord.join(threads)
-            self.Session.close()
-            print('Training Done')
+        # Wait for threads to finish.
+        coord.join(threads)
+        self.Session.close()
+        print('Training Done')
 
     def training_init(self, nEpochs=10, saveStep=10):
         """ Initialize the training
@@ -373,11 +368,9 @@ class HourglassModel():
         with tf.name_scope('Session'):
             for i in self.gpu:
                 with tf.device(i):
-
                     self._init_weight()
                     self.saver = tf.train.Saver()
                     if self.cont:
-
                         self.saver.restore(self.Session, self.cont)
                     self.train(nEpochs, saveStep)
 
@@ -392,3 +385,15 @@ class HourglassModel():
         self.Session.run(tf.local_variables_initializer())
         tl.layers.initialize_global_variables(self.Session)
         print("init done")
+    #
+    # def predict(self, img_dir,load):
+    #     #if os.path.isdir(img_dir):
+    #     x = tf.placeholder(dtype= tf.float32, shape= (None, 256, 256, 3), name = 'test_img')
+    #     predict = self._graph_hourglass(x)
+    #     hg = self.Session.run()
+    #     with self.graph.as_default():
+    #         with tf.device(self.gpu[0]):
+    #             self._init_weight()
+    #             self.saver = tf.train.Saver()
+    #             if self.cont:
+    #                 self.saver.restore(self.Session, load)
