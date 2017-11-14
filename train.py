@@ -53,13 +53,13 @@ if __name__ == '__main__':
     print('--Parsing Config File')
     params = process_config('config.cfg')
     network_params = process_hourglass("hourglass.cfg")
-
+    print(params)
     train_data = DataGenerator(imgdir=params['train_img_path'], label_dir=params['label_dir'],
-                               out_record=params['train_record'],
-                               batch_size=params['batch_size'], name="train", is_aug=False)
+                               out_record=params['train_record'],num_txt=params['train_num_txt'],
+                               batch_size=params['batch_size'], name="train", is_aug=False,isvalid=False)
     valid_data = DataGenerator(imgdir=params['valid_img_path'], label_dir=params['valid_label'],
-                               out_record=params['valid_record'],
-                               batch_size=params['batch_size'], name="valid", is_aug=False)
+                               out_record=params['valid_record'],num_txt=params['valid_num_txt'],
+                               batch_size=params['batch_size'], name="valid", is_aug=False,isvalid=True)
 
     img, hm = train_data.getData()
 

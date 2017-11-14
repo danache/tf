@@ -3,12 +3,11 @@ import tensorflow as tf
 from eval import MSE
 import numpy as np
 import sys
-import os
-import cv2
+
 import tensorlayer as tl
 
 from eval.eval import accuracy_computation
-
+from eval.ht2coord import getjointcoord
 class train_class():
     def __init__(self, model, nstack=4, batch_size=32,learn_rate=2.5e-4, decay=0.96, decay_step=2000,
                  logdir_train="./log/train.log", logdir_valid="./log/test.log",
@@ -48,7 +47,7 @@ class train_class():
         #####生成验证数据
         if self.valid_record:
             valid_data = self.valid_record
-            valid_img, valid_ht = valid_data.getData()
+            valid_img, valid_ht,self.valid_size, self.valid_name = valid_data.getData()
             self.valid_num = valid_data.getN()
             self.validIter = int(self.valid_num / self.batch_size)
             self.valid_output = self.model(valid_img, reuse=True)
@@ -144,7 +143,7 @@ class train_class():
             loss = 0
             avg_cost = 0.
 
-            for n_batch in range(n_step_epoch):#n_step_epoch
+            for n_batch in range(1):#n_step_epoch
                 percent = ((n_batch + 1) / n_step_epoch) * 100
                 num = np.int(20 * percent / 100)
                 tToEpoch = int((time.time() - epochstartTime) * (100 - percent) / (percent))
@@ -177,10 +176,16 @@ class train_class():
 
             #####valid
             if self.valid_record:
-                for i in range(self.validIter):#self.validIter
-                    accuracy_pred = self.Session.run([self.acc])
+                predictions = dict()
+                predictions['image_ids'] = []
+                predictions['annos'] = dict()
+
+                for i in range(5):#self.validIter
+                    accuracy_pred,val_out,val_size, val_name = self.Session.run([self.acc,self.valid_output.outputs,self.valid_size,self.valid_name])
                     #print(np.array(accuracy_pred).shape)
                     accuracy_array += np.array(accuracy_pred, dtype=np.float32) / self.validIter
+                    getjointcoord(val_out,val_size,val_name,predictions)
+
                 print('--Avg. Accuracy =', str((np.sum(accuracy_array) / len(accuracy_array)))[:6], )
                 self.resume['accur'].append(accuracy_pred)
                 self.resume['err'].append(np.sum(accuracy_array) / len(accuracy_array))

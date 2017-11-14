@@ -14,20 +14,22 @@ import tensorlayer as tl
 对于不同的数据集,根据图片数据集不同改写。
 """
 class DataGenerator():
-    def __init__(self, imgdir=None, label_dir=None, out_record=None, nstack = 4,resize=256,scale=0.25, flipping=False,
-                 color_jitting=30,rotate=30,batch_size=32,is_valid=False,name="",is_aug=True):
+    def __init__(self, imgdir=None, label_dir=None, out_record=None, num_txt="",nstack = 4,resize=256,scale=0.25, flipping=False,
+                 color_jitting=30,rotate=30,batch_size=32,name="",is_aug=True, isvalid=False):
         self.nstack = nstack
         if is_aug:
-            self.scale = scale
+
             self.flipping = flipping
             self.color_jitting = color_jitting
             self.rotate = rotate
         else:
 
-            self.scale = False
             self.flipping = False
             self.color_jitting = False
             self.rotate = False
+        self.num_txt = num_txt
+        self.scale = scale
+        self.isvalid = isvalid
         self.resize = resize
         self.batch_size = batch_size
         self.name = name
@@ -35,19 +37,20 @@ class DataGenerator():
             print(out_record)
             print("record file exist!!")
             self.record_path = out_record
-            txt = open(name + ".txt","r")
+            txt = open(num_txt,"r")
 
             for line in txt.readlines():
                 self.number = int(line.strip())
 
         else:
             print(self.name + "record file not exist!  creating !!!")
-            self.generageRecord(imgdir, label_dir, out_record, extension=0.3, resize=256)
+            self.generageRecord(imgdir, label_dir, out_record, extension=self.scale, resize=256)
             self.record_path = out_record
 
     def getData(self):
         return self.read_and_decode(filename=self.record_path,img_size=self.resize,flipping=True,scale=self.scale,
-                                    color_jitting=self.color_jitting,rotate=self.rotate, batch_size=self.batch_size)
+                                    color_jitting=self.color_jitting,rotate=self.rotate, batch_size=self.batch_size,
+                                    isvalid=self.isvalid)
     def getN(self):
         return self.number
 
@@ -129,10 +132,13 @@ class DataGenerator():
                             #                 if coord[-1] != 2:
                             #                     human = cv2.circle(new_img,(int(coord[0] * resize),int(coord[1]* resize)),10,(255,0,255),-1)
                 new_img = new_img.astype(np.uint8)
-                img_size = [ row["image_id"], x1, y1, board_w,board_h,newsize[0], newsize[1]]
-                feature = {'label': self._bytes_feature(tf.compat.as_bytes(np.array(ankle).astype(np.float64).tostring()))
-                    , 'img_raw': self._bytes_feature(tf.compat.as_bytes(new_img.tostring())),
-                           'img_size': }
+                img_size = [ w,h,x1, y1, board_w,board_h,newsize[0], newsize[1]]
+                feature = {
+                    'label': self._bytes_feature(tf.compat.as_bytes(np.array(ankle).astype(np.float64).tostring())),
+                    'img_raw': self._bytes_feature(tf.compat.as_bytes(new_img.tostring())),
+                    'img_size': self._bytes_feature(tf.compat.as_bytes(np.array(img_size).astype(np.float64).tostring())),
+                    'img_name':self._bytes_feature(tf.compat.as_bytes(row["image_id"]))
+                }
 
                 example = tf.train.Example(features=tf.train.Features(feature=feature))
                 writer.write(example.SerializeToString())
@@ -142,7 +148,7 @@ class DataGenerator():
             if index % 100 == 0:
                 print("creating -- %d" % (index))
         writer.close()
-        txt = open(self.name + ".txt","w")
+        txt = open(self.num_txt,"w")
         txt.write(str(self.number))
         txt.close()
         return None
@@ -199,10 +205,13 @@ class DataGenerator():
         return hm
 
     def read_and_decode(self,filename, img_size=256, label_size=42, heatmap_size=64, scale=0.25, flipping=False,
-                        color_jitting=True, rotate=30,batch_size=32):
+                        color_jitting=True, rotate=30,batch_size=32,isvalid=False):
 
         feature = {'img_raw': tf.FixedLenFeature([], tf.string),
-                   'label': tf.FixedLenFeature([], tf.string)}
+                   'label': tf.FixedLenFeature([], tf.string),
+                   'img_size': tf.FixedLenFeature([], tf.string),
+                   'img_name': tf.FixedLenFeature([], tf.string),
+                   }
         # Create a list of filenames and pass it to a queue
         filename_queue = tf.train.string_input_producer([filename])
         # Define a reader and read the next record
@@ -224,13 +233,13 @@ class DataGenerator():
         label = tf.decode_raw(features['label'], tf.float64)
         label = tf.reshape(label, [label_size, ])
 
+        img_size = tf.decode_raw(features['img_size'], tf.float64)
+        img_size = tf.reshape(img_size, [8,])
+        img_name = features['img_name']
         """
         Data augmention
         """
         ###random_scale
-        if scale:
-            img_scale_size = int(random.uniform(1 - scale, 1 + scale) * img_size)
-            img = tf.image.resize_images(img, (img_scale_size, img_scale_size), method=tf.image.ResizeMethod.BICUBIC)
 
         heatmap = self.generateHeatMap(heatmap_size, heatmap_size, label, label_size / 3, heatmap_size * 1.)
         repeat = []
@@ -269,15 +278,26 @@ class DataGenerator():
         img = tf.divide(img, 255)
 
         if batch_size:
-            min_after_dequeue = 10
-            capacity = min_after_dequeue + 4 * batch_size
-            image, ht = tf.train.shuffle_batch([img, heatmap],
-                                                  batch_size=batch_size,
-                                                  num_threads=4,
-                                                  capacity=capacity,
-                                                  min_after_dequeue=min_after_dequeue)
+            if isvalid:
+                min_after_dequeue = 10
+                capacity = min_after_dequeue + 4 * batch_size
+                image, ht,size,name = tf.train.shuffle_batch([img, heatmap,img_size,img_name],
+                                                      batch_size=batch_size,
+                                                      num_threads=4,
+                                                      capacity=capacity,
+                                                      min_after_dequeue=min_after_dequeue)
 
-            return image, ht
+                return image, ht,size,name
+            else:
+                min_after_dequeue = 10
+                capacity = min_after_dequeue + 4 * batch_size
+                image, ht = tf.train.shuffle_batch([img, heatmap],
+                                                               batch_size=batch_size,
+                                                               num_threads=4,
+                                                               capacity=capacity,
+                                                               min_after_dequeue=min_after_dequeue)
+
+                return image, ht
         else:
             return img,label
 
