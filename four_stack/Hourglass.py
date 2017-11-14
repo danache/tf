@@ -1,23 +1,16 @@
 import time
 import tensorflow as tf
 import numpy as np
-import sys
 import os
-
+import cv2
 import tensorlayer as tl
 from tensorlayer.layers import Conv2d as conv_2d
 from models.layers.Residual import Residual
 from dataGenerator.datagen import DataGenerator
 from eval.eval import accuracy_computation
-import opt
-os.environ["CUDA_VISIBLE_DEVICES"]='1'
+
 class HourglassModel():
-    def __init__(self, nFeat=512, nStack=4, nModules=1, nLow=4, outputDim=14, batch_size=32, drop_rate=0.2,
-                 lear_rate=2.5e-4, decay=0.96, decay_step=2000, dataset=None, training=True, w_summary=True,
-                 logdir_train="./log/train/", logdir_test="./log/test/", tiny=True, modif=True, name='tiny_hourglass',
-                 train_img_path="", train_label_path="", train_record="",
-                 valid_img_path="", valid_label_path="", valid_record="",
-                 model_dir="",resume=""
+    def __init__(self, nFeat=256, nStack=4, nModules=1, outputDim=14,
                  ):
         """ Initializer
         Args:
@@ -38,88 +31,9 @@ class HourglassModel():
             name				: name of the model
         """
         self.nStack = nStack
-        self.nFeat = nFeat
+        self.nFeats = nFeat
         self.nModules = nModules
-        self.outDim = outputDim
-        self.batchSize = batch_size
-        self.training = training
-        self.w_summary = w_summary
-        self.tiny = tiny
-        self.dropout_rate = drop_rate
-        self.learning_rate = lear_rate
-        self.decay = decay
-        self.name = name
-        self.decay_step = decay_step
-        self.nLow = nLow
-        self.modif = modif
-        self.dataset = dataset
-        self.cpu = '/cpu:0'
-        self.gpu = ['/gpu:1']
-        self.logdir_train = logdir_train
-        self.logdir_test = logdir_test
-        self.joints = [u"左小腿",u"左大腿",u"左连线",u"右连线",u"右大腿",u"右小腿",u"头和脖子",
-                                u"左肩",u"左大臂",u"左小臂",u"右肩",u"右大臂",u"右小臂"]
-        self.joints = ["rShoulder", "rElbow", "rWrist", "lShoulder", "lElbow", "lWrist", "rhip","rknee","rankle",
-                       "lhip","lknee","lankle","head","neck"]
-        self.train_img_path = train_img_path
-        self.train_label_path = train_label_path
-        self.train_record = train_record
-
-        self.valid_img_path = valid_img_path
-        self.valid_label_path = valid_label_path
-        self.valid_record = valid_record
-        self.model_dir = model_dir
-        self.train_num = 1000
-        self.valid_num = 1000
-        self.cont = resume
-
-    def get_input(self):
-        """ Returns Input (Placeholder) Tensor
-        Image Input :
-            Shape: (None,256,256,3)
-            Type : tf.float32
-        Warning:
-            Be sure to build the model first
-        """
-        return self.img
-
-    def get_output(self):
-        """ Returns Output Tensor
-        Output Tensor :
-            Shape: (None, nbStacks, 64, 64, outputDim)
-            Type : tf.float32
-        Warning:
-            Be sure to build the model first
-        """
-        return self.output
-
-    def get_label(self):
-        """ Returns Label (Placeholder) Tensor
-        Image Input :
-            Shape: (None, nbStacks, 64, 64, outputDim)
-            Type : tf.float32
-        Warning:
-            Be sure to build the model first
-        """
-        return self.gtMaps
-
-    def get_loss(self):
-        """ Returns Loss Tensor
-        Image Input :
-            Shape: (1,)
-            Type : tf.float32
-        Warning:
-            Be sure to build the model first
-        """
-        return self.loss
-
-    def get_saver(self):
-        """ Returns Saver
-        /!\ USE ONLY IF YOU KNOW WHAT YOU ARE DOING
-        Warning:
-            Be sure to build the model first
-        """
-        return self.saver
+        self.partnum = outputDim
 
     def hourglass(self, data, n, f, name="",reuse=False):
         with tf.variable_scope(name, reuse=reuse):
@@ -154,79 +68,66 @@ class HourglassModel():
             inputs : TF Tensor (placeholder) of shape (None, 256, 256, 3) #TODO : Create a parameter for customize size
         """
 
-        with tf.device(self.gpu[0]):
-            with tf.variable_scope("model", reuse=reuse):
-                tl.layers.set_name_reuse(reuse)
-                data = tl.layers.InputLayer(inputs, name='input')
-                with tf.name_scope('train'):
-                    tf.summary.histogram('data', data.outputs, collections=['train'])
+        with tf.variable_scope("model", reuse=reuse):
+            tl.layers.set_name_reuse(reuse)
+            data = tl.layers.InputLayer(inputs, name='input')
+            with tf.name_scope('train'):
+                tf.summary.histogram('data', data.outputs, collections=['train'])
 
-                conv1 = conv_2d(data, 64, filter_size=(6, 6), strides=(2, 2), padding="SAME", name="conv1")
+            conv1 = conv_2d(data, 64, filter_size=(6, 6), strides=(2, 2), padding="SAME", name="conv1")
 
-                bn1 = tl.layers.BatchNormLayer(conv1, name="bn1", act=tf.nn.relu)
-                with tf.name_scope('train'):
-                    tf.summary.histogram("conv1_bn/weight", conv1.all_params[0], collections=['train'])
-                    tf.summary.histogram('conv1_bn', bn1.outputs, collections=['train'])
-                r1 = Residual(bn1, 64, 128, name="Residual1",reuse=reuse)
-                with tf.name_scope('train'):
-                    tf.summary.histogram('residual1', r1.outputs, collections=['train'])
+            bn1 = tl.layers.BatchNormLayer(conv1, name="bn1", act=tf.nn.relu)
+            with tf.name_scope('train'):
+                tf.summary.histogram("conv1_bn/weight", conv1.all_params[0], collections=['train'])
+                tf.summary.histogram('conv1_bn', bn1.outputs, collections=['train'])
+            r1 = Residual(bn1, 64, 128, name="Residual1",reuse=reuse)
+            with tf.name_scope('train'):
+                tf.summary.histogram('residual1', r1.outputs, collections=['train'])
 
-                pool = tl.layers.MaxPool2d(r1, (2, 2), strides=(2, 2), name="pool1")
+            pool = tl.layers.MaxPool2d(r1, (2, 2), strides=(2, 2), name="pool1")
 
-                r2 = Residual(pool, 128, 128, name="Residual2",reuse=reuse)
-                with tf.name_scope('train'):
-                    tf.summary.histogram('residual2', r2.outputs, collections=['train'])
-                r3 = Residual(r2, 128, opt.nFeats, name="Residual3",reuse=reuse)
-                with tf.name_scope('train'):
-                    tf.summary.histogram('residual3', r3.outputs, collections=['train'])
-                        # return r3
-                # Storage Table
+            r2 = Residual(pool, 128, 128, name="Residual2",reuse=reuse)
+            with tf.name_scope('train'):
+                tf.summary.histogram('residual2', r2.outputs, collections=['train'])
+            r3 = Residual(r2, 128, self.nFeats, name="Residual3",reuse=reuse)
+            with tf.name_scope('train'):
+                tf.summary.histogram('residual3', r3.outputs, collections=['train'])
+                    # return r3
+            # Storage Table
 
-                out = []
-                inter = r3
-            with tf.variable_scope("stack", reuse=reuse):
-                for i in range(self.nStack):
-                    with tf.name_scope('stage_%d' % (i)):
-                        hg = self.hourglass(inter, n=4, f=opt.nFeats, name="stage_%d_hg" % (i),reuse=reuse)
+            out = []
+            inter = r3
+        with tf.variable_scope("stack", reuse=reuse):
+            for i in range(self.nStack):
+                with tf.name_scope('stage_%d' % (i)):
+                    hg = self.hourglass(inter, n=4, f=self.nFeats, name="stage_%d_hg" % (i),reuse=reuse)
 
-                        tmpr1 = Residual(hg, opt.nFeats, opt.nFeats, name="stage_%d_Residual1" % (i))
-                        ll = self.lin(tmpr1, opt.nFeats, name="stage_%d_lin1" % (i),reuse=reuse)
-                        tmpout = conv_2d(ll, opt.partnum, filter_size=(1, 1), strides=(1, 1),
-                                         name="stage_%d_tmpout" % (i))
-                        out.append(tmpout)
-                        if i < self.nStack - 1:
-                            ll_ = conv_2d(ll, opt.nFeats, filter_size=(1, 1), strides=(1, 1),
-                                          name="stage_%d_ll_" % (i))
-                            tmpOut_ = conv_2d(tmpout, opt.nFeats, filter_size=(1, 1), strides=(1, 1),
-                                              name="stage_%d_tmpOut_" % (i))
-                            inter = tl.layers.ElementwiseLayer(layer=[inter, ll_, tmpOut_],
-                                                               combine_fn=tf.add, name="stage_%d_add_n" % (i))
+                    tmpr1 = Residual(hg, self.nFeats, self.nFeats, name="stage_%d_Residual1" % (i))
+                    ll = self.lin(tmpr1, self.nFeats, name="stage_%d_lin1" % (i),reuse=reuse)
+                    tmpout = conv_2d(ll, self.partnum, filter_size=(1, 1), strides=(1, 1),
+                                     name="stage_%d_tmpout" % (i))
+                    out.append(tmpout)
+                    if i < self.nStack - 1:
+                        ll_ = conv_2d(ll, self.nFeats, filter_size=(1, 1), strides=(1, 1),
+                                      name="stage_%d_ll_" % (i))
+                        tmpOut_ = conv_2d(tmpout, self.nFeats, filter_size=(1, 1), strides=(1, 1),
+                                          name="stage_%d_tmpOut_" % (i))
+                        inter = tl.layers.ElementwiseLayer(layer=[inter, ll_, tmpOut_],
+                                                           combine_fn=tf.add, name="stage_%d_add_n" % (i))
 
-            # end = out[0]
-            end = tl.layers.StackLayer(out, axis=1, name='final_output')
-            # end = tl.layers.StackLayer([out])
-            return end
+        # end = out[0]
+        end = tl.layers.StackLayer(out, axis=1, name='final_output')
+        # end = tl.layers.StackLayer([out])
+        return end
 
-    def MSE(self, output, target, is_mean=False):
-        print(output.get_shape())
-        print(target.get_shape())
-
-        with tf.name_scope("mean_squared_error_loss"):
-            if output.get_shape().ndims == 5:  # [batch_size, n_feature]
-                if is_mean:
-                    mse = tf.reduce_mean(tf.reduce_mean(tf.squared_difference(output, target), [1, 2, 3, 4]))
-                else:
-                    mse = tf.reduce_mean(tf.reduce_sum(tf.squared_difference(output, target), [1, 2, 3, 4]))
-                return mse
-            else:
-                raise Exception("Unknow dimension")
 
     def generateModel(self):
         generate_time = time.time()
         #####生成训练数据
         train_data = DataGenerator(imgdir=self.train_img_path, label_dir=self.train_label_path,
                                    out_record=self.train_record,
-                                   batch_size=self.batchSize, scale=False, is_valid=False, name="train")
+                                   batch_size=self.batchSize, scale=False, is_valid=False, name="train",
+                                   color_jitting=False,flipping=False,)
 
         self.train_num = train_data.getN()
         train_img, train_heatmap = train_data.getData()
@@ -255,7 +156,7 @@ class HourglassModel():
                 self.acc = accuracy_computation(self.valid_output.outputs, valid_ht, batch_size=self.batchSize,
                                               nstack=self.nStack)
             with tf.name_scope('test'):
-                for i in range(opt.partnum):
+                for i in range(self.partnum):
                     tf.summary.scalar(self.joints[i],self.acc[i], collections = ['test'])
         with tf.name_scope('train'):
             tf.summary.scalar("train_loss", self.loss, collections=['train'])
@@ -285,76 +186,6 @@ class HourglassModel():
         self.merged = tf.summary.merge_all('train')
         self.valid_merge = tf.summary.merge_all('test')
 
-    def train(self, nEpochs=10, saveStep=10):
-        #####参数定义
-        self.resume = {}
-        self.resume['accur'] = []
-        self.resume['loss'] = []
-        self.resume['err'] = []
-        n_step_epoch = int(self.train_num / self.batchSize)
-        self.train_writer = tf.summary.FileWriter("./log/train.log", self.Session.graph)
-        self.valid_writer = tf.summary.FileWriter("./log/valid.log")
-        init = tf.group(tf.global_variables_initializer(),
-                        tf.local_variables_initializer())
-
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord, sess=self.Session)
-        self.Session.run(init)
-
-        #with tf.device(self.gpu):
-
-        for epoch in range(21,nEpochs):
-            epochstartTime = time.time()
-            print('Epoch :' + str(epoch) + '/' + str(nEpochs) + '\n')
-            loss = 0
-            avg_cost = 0.
-            for n_batch in range(n_step_epoch):#n_step_epoch
-                percent = ((n_batch + 1) / n_step_epoch) * 100
-                num = np.int(20 * percent / 100)
-                tToEpoch = int((time.time() - epochstartTime) * (100 - percent) / (percent))
-                sys.stdout.write(
-                    '\r Train: {0}>'.format("=" * num) + "{0}>".format(" " * (20 - num)) + '||' + str(percent)[
-                                                                                                  :4] + '%' + ' -cost: ' + str(
-                        loss)[:6] + ' -avg_loss: ' + str(avg_cost)[:5] + ' -timeToEnd: ' + str(tToEpoch) + ' sec.')
-                sys.stdout.flush()
-
-                if n_batch % saveStep == 0:
-                    _, lo, summary = self.Session.run([self.train_rmsprop, self.loss, self.merged])
-                    self.train_writer.add_summary(summary, epoch * n_step_epoch + n_batch)
-                    self.train_writer.flush()
-                else:
-                    _, lo = self.Session.run([self.train_rmsprop, self.loss])
-                loss += lo
-                avg_cost += lo / n_step_epoch
-            epochfinishTime = time.time()
-            print('Epoch ' + str(epoch) + '/' + str(nEpochs) + ' done in ' + str(
-                int(epochfinishTime - epochstartTime)) + ' sec.' + ' -avg_time/batch: ' + str(
-                ((epochfinishTime - epochstartTime) / n_step_epoch))[:4] + ' sec.')
-            with tf.name_scope('save'):
-                self.saver.save(self.Session, os.path.join(self.model_dir,self.name + '_' + str(epoch + 1)))
-            accuracy_array = np.zeros([1,14])
-            self.resume['loss'].append(loss)
-
-            #####valid
-            if self.valid_img_path:
-                for i in range(self.validIter):#self.validIter
-                    accuracy_pred = self.Session.run([self.acc])
-                    #print(np.array(accuracy_pred).shape)
-                    accuracy_array += np.array(accuracy_pred, dtype=np.float32) / self.validIter
-                print('--Avg. Accuracy =', str((np.sum(accuracy_array) / len(accuracy_array)))[:6], )
-                self.resume['accur'].append(accuracy_pred)
-                self.resume['err'].append(np.sum(accuracy_array) / len(accuracy_array))
-                valid_summary = self.Session.run([self.valid_merge])
-
-                self.valid_writer.add_summary(valid_summary[0],epoch)
-                self.valid_writer.flush()
-
-        coord.request_stop()
-
-        # Wait for threads to finish.
-        coord.join(threads)
-        self.Session.close()
-        print('Training Done')
 
     def training_init(self, nEpochs=10, saveStep=10):
         """ Initialize the training
@@ -374,26 +205,57 @@ class HourglassModel():
                         self.saver.restore(self.Session, self.cont)
                     self.train(nEpochs, saveStep)
 
-    def _init_weight(self):
-        """ Initialize weights
-        """
-        print('Session initialization')
-        self.Session = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 
-        self.Session.run(tf.global_variables_initializer())
+    def predict(self, img_dir,load,thresh=0.3):
+        #if os.path.isdir(img_dir):
+        self._init_weight()
+        x = tf.placeholder(dtype= tf.float32, shape= (None, 256, 256, 3), name='test_img')
+        predict = self._graph_hourglass(x)
+        with self.tf.Graph().as_default():
+            with tf.device(self.gpu[0]):
+                self._init_weight()
+                self.saver = tf.train.Saver()
+                if self.cont:
+                    self.saver.restore(self.Session, load)
+            with tf.name_scape('predction'):
+                pred_sigmoid = tf.nn.sigmoid(predict[:, self.nStack - 1],
+                                                     name='sigmoid_final_prediction')
+                pred_final = predict[:, self.HG.nStack - 1]
+        pred_lst = []
+        if os.path.isdir(img_dir):
+            for root, dirs, files in os.walk(img_dir):
+                for file in files:
+                    pred_lst.append(os.path.join(root, file))
+        else:
+            pred_lst.append(img_dir)
+        for img_file in pred_lst:
+            img = cv2.imread(img_file)
+            board_w , board_h = img.shape[1], img.shape[0]
+            resize = 256
+            if board_h < board_w:
+                newsize = (resize, board_h * resize // board_w)
+            else:
+                newsize = (board_w * resize // board_h, resize)
 
-        self.Session.run(tf.local_variables_initializer())
-        tl.layers.initialize_global_variables(self.Session)
-        print("init done")
-    #
-    # def predict(self, img_dir,load):
-    #     #if os.path.isdir(img_dir):
-    #     x = tf.placeholder(dtype= tf.float32, shape= (None, 256, 256, 3), name = 'test_img')
-    #     predict = self._graph_hourglass(x)
-    #     hg = self.Session.run()
-    #     with self.graph.as_default():
-    #         with tf.device(self.gpu[0]):
-    #             self._init_weight()
-    #             self.saver = tf.train.Saver()
-    #             if self.cont:
-    #                 self.saver.restore(self.Session, load)
+
+            tmp = cv2.resize(img, newsize)
+            new_img = np.zeros((resize, resize, 3))
+            if (tmp.shape[0] < resize):  # 高度不够，需要补0。则要对item[6:]中的第二个值进行修改
+                up = np.int((resize - tmp.shape[0]) * 0.5)
+                down = np.int((resize + tmp.shape[0]) * 0.5)
+                new_img[up:down, :, :] = tmp
+            elif (tmp.shape[1] < resize):
+                left = np.int((resize - tmp.shape[1]) * 0.5)
+                right = np.int((resize + tmp.shape[1]) * 0.5)
+                new_img[:, left:right, :] = tmp
+            hg = self.Session.run(pred_sigmoid,
+                                     feed_dict={img: np.expand_dims(new_img / 255, axis=0)})
+            j = np.ones(shape=(opt.partnum, 2)) * -1
+
+            for i in range(len(j)):
+                idx = np.unravel_index(hg[0, :, :, i].argmax(), (64, 64))
+                if hg[0, idx[0], idx[1], i] > thresh:
+                    j[i] = np.asarray(idx) * 256 / 64
+                    cv2.circle(img_res, center=tuple(j[i].astype(np.int))[::-1], radius=5, color=self.color[i],
+                                   thickness=-1)
+

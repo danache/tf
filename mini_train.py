@@ -11,12 +11,8 @@ from four_stack.Hourglass import HourglassModel
 # with tf.Session() as sess:
 #     sess.run(tf.initialize_all_variables())
 
-train_img_path = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoint_train_images_20170902"
-label_dir = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoint_train_annotations_20170909.json"
-train_record = "/media/bnrc2/_backup/ai/mu/train.tfrecords"
-valid_img_path = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_validation_20170911/keypoint_validation_images_20170911/"
-valid_label = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_validation_20170911/keypoint_validation_annotations_20170911.json"
-valid_record = "/media/bnrc2/_backup/ai/mu/valid.tfrecords"
+
+
 
 model = HourglassModel(train_img_path=train_img_path,train_label_path=label_dir,train_record=train_record,
                        valid_img_path=valid_img_path, valid_label_path=valid_label, valid_record=valid_record,

@@ -9,20 +9,26 @@ import scipy.misc as scm
 import tensorflow as tf
 import pandas as pd
 import tensorlayer as tl
-import opt
 """
 自定义数据生成器，包括生成tfrecord,数据增强，迭代器等。
 对于不同的数据集,根据图片数据集不同改写。
 """
 class DataGenerator():
-    def __init__(self, imgdir=None, label_dir=None, out_record=None, resize=256,scale=0.25, flipping=False,
-                 color_jitting=30,rotate=30,batch_size=32,is_valid=False,name=""):
+    def __init__(self, imgdir=None, label_dir=None, out_record=None, nstack = 4,resize=256,scale=0.25, flipping=False,
+                 color_jitting=30,rotate=30,batch_size=32,is_valid=False,name="",is_aug=True):
+        self.nstack = nstack
+        if is_aug:
+            self.scale = scale
+            self.flipping = flipping
+            self.color_jitting = color_jitting
+            self.rotate = rotate
+        else:
 
+            self.scale = False
+            self.flipping = False
+            self.color_jitting = False
+            self.rotate = False
         self.resize = resize
-        self.scale = scale
-        self.flipping = flipping
-        self.color_jitting = color_jitting
-        self.rorate = rotate
         self.batch_size = batch_size
         self.name = name
         if os.path.exists(out_record):
@@ -41,7 +47,7 @@ class DataGenerator():
 
     def getData(self):
         return self.read_and_decode(filename=self.record_path,img_size=self.resize,flipping=True,scale=self.scale,
-                                    color_jitting=True,rotate=self.rorate, batch_size=self.batch_size)
+                                    color_jitting=self.color_jitting,rotate=self.rotate, batch_size=self.batch_size)
     def getN(self):
         return self.number
 
@@ -104,7 +110,6 @@ class DataGenerator():
                 tmp = cv2.resize(human, newsize)
                 new_img = np.zeros((resize, resize, 3))
                 if (tmp.shape[0] < resize):  # 高度不够，需要补0。则要对item[6:]中的第二个值进行修改
-
                     up = np.int((resize - tmp.shape[0]) * 0.5)
                     down = np.int((resize + tmp.shape[0]) * 0.5)
                     new_img[up:down, :, :] = tmp
@@ -124,14 +129,16 @@ class DataGenerator():
                             #                 if coord[-1] != 2:
                             #                     human = cv2.circle(new_img,(int(coord[0] * resize),int(coord[1]* resize)),10,(255,0,255),-1)
                 new_img = new_img.astype(np.uint8)
-
+                img_size = [ row["image_id"], x1, y1, board_w,board_h,newsize[0], newsize[1]]
                 feature = {'label': self._bytes_feature(tf.compat.as_bytes(np.array(ankle).astype(np.float64).tostring()))
-                    , 'img_raw': self._bytes_feature(tf.compat.as_bytes(new_img.tostring()))}
+                    , 'img_raw': self._bytes_feature(tf.compat.as_bytes(new_img.tostring())),
+                           'img_size': }
 
                 example = tf.train.Example(features=tf.train.Features(feature=feature))
                 writer.write(example.SerializeToString())
                 self.number += 1
-
+            if index > 100:
+                break
             if index % 100 == 0:
                 print("creating -- %d" % (index))
         writer.close()
@@ -179,10 +186,8 @@ class DataGenerator():
         for i in range(int(num_joints)):
             tmp = (tf.sqrt(maxlenght) * maxlenght * 10 / 4096.) + 2
             s = tf.cast(tmp, tf.int32)
-
             x = tf.cast(joints[i * 3], tf.float64)
             y = tf.cast(joints[i * 3 + 1], tf.float64)
-            # print(tf.(joints[i * 3 + 2], 1.))
             ht = tf.cond(
                 (tf.equal(joints[i * 3 + 2], 1.)),
                 lambda: self._makeGaussian(height, width, s, center=(tf.cast(x * 64, tf.int32), tf.cast(y * 64, tf.int32))),
@@ -232,7 +237,8 @@ class DataGenerator():
 
 
         ###rotate
-        if rotate:
+        if self.rotate:
+            print("rotate")
             rotate_angle = random.uniform(-rotate*1./360, rotate*1./360) * np.pi
             #ex_angle = np.pi / 8
             #print(rotate_angle)
@@ -240,12 +246,14 @@ class DataGenerator():
             for i in range(len(heatmap)):
                 heatmap[i] = tf.contrib.image.rotate(heatmap[i], angles=rotate_angle)
         ###flip
-        if flipping:
+        if self.flipping:
+            print("flipping")
             if (random.random() > 0.5):
                 img = tf.image.flip_left_right(img)
                 for i in range(len(heatmap)):
                     heatmap[i] = tf.image.flip_left_right(heatmap[i])
-        if color_jitting:
+        if self.color_jitting:
+            print("color jitting")
             ###color_jitting
             img = tf.image.random_hue(img, max_delta=0.05)
             img = tf.image.random_contrast(img, lower=0.3, upper=1.0)
@@ -254,7 +262,7 @@ class DataGenerator():
         for i in range(len(heatmap)):
             heatmap[i] = tf.squeeze(heatmap[i])
         heatmap = tf.stack(heatmap,axis=-1)
-        for i in range(opt.nStack):
+        for i in range(self.nstack):
             repeat.append(heatmap)
         heatmap = tf.stack(repeat, axis=0)
         img = tf.cast(img, tf.float32)
