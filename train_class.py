@@ -3,17 +3,19 @@ import tensorflow as tf
 from eval import MSE
 import numpy as np
 import sys
-
+import os
 import tensorlayer as tl
 
 from eval.eval import accuracy_computation
 from eval.ht2coord import getjointcoord
+
+from tools.keypoint_eval import getScore
+from tools.keypoint_eval import load_annotations
 class train_class():
     def __init__(self, model, nstack=4, batch_size=32,learn_rate=2.5e-4, decay=0.96, decay_step=2000,
                  logdir_train="./log/train.log", logdir_valid="./log/test.log",
-                name='tiny_hourglass', train_record="",
-                valid_record="",save_model_dir="",resume="",gpu=[0],
-                 partnum=14,
+                name='tiny_hourglass', train_record="",valid_record="",save_model_dir="",resume="",gpu=[0],
+                 val_label="",partnum=14,human_decay=0.96
                  ):
         self.batch_size = batch_size
         self.nstack = nstack
@@ -33,7 +35,9 @@ class train_class():
         self.partnum=partnum
         self.joints = ["rShoulder", "rElbow", "rWrist", "lShoulder", "lElbow", "lWrist", "rhip","rknee","rankle",
                        "lhip","lknee","lankle","head","neck"]
-
+        self.val_label = val_label
+        self.mae = tf.Variable(0, dtype=tf.float32)
+        self.human_decay = human_decay
     def generateModel(self):
         generate_time = time.time()
         train_data = self.train_record
@@ -86,7 +90,7 @@ class train_class():
 
         with tf.device(self.cpu):
             with tf.name_scope('training'):
-                print(type(self.loss))
+                #print(type(self.loss))
                 tf.summary.scalar('loss', self.loss, collections=['train'])
                 tf.summary.scalar('learning_rate', self.lr, collections=['train'])
             with tf.name_scope('summary'):
@@ -94,6 +98,8 @@ class train_class():
                     tf.summary.scalar("stack%d"%i, self.stack_loss[i], collections=['train'])
                 for j in range(self.partnum):
                     tf.summary.scalar(self.joints[i], self.part_loss[j], collections=['train'])
+            with tf.name_scope('MAE'):
+                tf.summary.scalar("MAE", self.mae, collections=['test'])
 
         self.train_merged = tf.summary.merge_all('train')
         self.valid_merge = tf.summary.merge_all('test')
@@ -110,21 +116,30 @@ class train_class():
         tl.layers.initialize_global_variables(self.Session)
         print("init done")
 
-    def training_init(self, nEpochs=10, saveStep=10):
+    def training_init(self, nEpochs=10, valStep=3000,showStep=10):
+        print(showStep)
         with tf.name_scope('Session'):
-            for i in self.gpu[0]:
+            with tf.device(self.gpu[0]):
                 self._init_weight()
                 self.saver = tf.train.Saver()
                 if self.resume:
                     self.saver.restore(self.Session, self.resume)
-                self.train(nEpochs, saveStep)
+                self.train(nEpochs, valStep,showStep)
 
-    def train(self, nEpochs=10, saveStep=10):
+    def train(self, nEpochs=10, valStep = 3000,showStep=10 ):
+        best_val = open("./best_val.txt", "w")
+        best_model_dir = ""
+        best_val = 99999
         #####参数定义
         self.resume = {}
         self.resume['accur'] = []
         self.resume['loss'] = []
         self.resume['err'] = []
+        return_dict = dict()
+        return_dict['error'] = None
+        return_dict['warning'] = []
+        return_dict['score'] = None
+        anno = load_annotations(self.val_label, return_dict)
 
         n_step_epoch = int(self.train_num / self.batch_size)
         self.train_writer = tf.summary.FileWriter(self.logdir_train, self.Session.graph)
@@ -143,7 +158,7 @@ class train_class():
             loss = 0
             avg_cost = 0.
 
-            for n_batch in range(1):#n_step_epoch
+            for n_batch in range(n_step_epoch):#n_step_epoch
                 percent = ((n_batch + 1) / n_step_epoch) * 100
                 num = np.int(20 * percent / 100)
                 tToEpoch = int((time.time() - epochstartTime) * (100 - percent) / (percent))
@@ -153,46 +168,81 @@ class train_class():
                         loss)[:6] + ' -avg_loss: ' + str(avg_cost)[:5] + ' -timeToEnd: ' + str(tToEpoch) + ' sec.')
                 sys.stdout.flush()
 
-                if n_batch % saveStep == 0:
+                if n_batch % showStep == 0:
                     _,lo ,sta_lo, part_lo,summary= self.Session.run\
                         ([self.train_rmsprop,self.loss,self.stack_loss,self.part_loss,self.train_merged])
-
                     self.train_writer.add_summary(summary, epoch * n_step_epoch + n_batch)
                     self.train_writer.flush()
+
                 else:
                     _, lo = self.Session.run([self.train_rmsprop, self.loss])
                 loss += lo
                 avg_cost += lo / n_step_epoch
+                if (n_batch+1) % valStep == 0:
+                    if self.valid_record:
+                        val_begin = time.time()
+                        accuracy_array = np.zeros([1, 14])
+                        predictions = dict()
+                        predictions['image_ids'] = []
+                        predictions['annos'] = dict()
+
+                        for i in range(self.validIter):  # self.validIter
+                            val_percent = ((i + 1) / self.validIter) * 100
+                            val_num = np.int(20 * val_percent / 100)
+                            val_tToEpoch = int((time.time() - val_begin) * (100 - val_percent) / (val_percent))
+
+                            accuracy_pred, val_out, val_size, val_name = self.Session.run(
+                                [self.acc, self.valid_output.outputs, self.valid_size, self.valid_name])
+                            # print(np.array(accuracy_pred).shape)
+                            accuracy_array += np.array(accuracy_pred, dtype=np.float32) / self.validIter
+                            predictions = getjointcoord(val_out, val_size, val_name, predictions)
+                            sys.stdout.write(
+                                '\r valid {0}>'.format("=" * val_num) + "{0}>".format(" " * (20 - val_num)) + '||' + str(
+                                    percent)[
+                                                                                                              :4] +
+                                '%' + ' -cost: ' + str(accuracy_array)[:6] +
+                                ' -timeToEnd: ' + str(val_tToEpoch) + ' sec.')
+                            sys.stdout.flush()
+
+                        score = getScore(predictions, anno, return_dict)
+
+                        print("epoch %d, batch %d ,val score = %d" % (epoch, n_batch, score))
+                        tmp = self.mae.assign(score)
+                        _ = self.Session.run(tmp)
+                        now_acc = (np.sum(accuracy_array) / len(accuracy_array))
+                        if now_acc < best_val:
+
+                            best_val = now_acc
+                            best_model_dir = os.path.join(self.save_dir, self.name + '_' + str(epoch) +
+                                                             "_" + str(n_batch) +(str(now_acc)[:6]))
+                            print("get lower loss, save at " + best_model_dir)
+                            with tf.name_scope('save'):
+                                self.saver.save(self.Session, best_model_dir)
+                        else:
+                            print("now val loss is not best, restore model from" + best_model_dir)
+                            self.saver.restore(self.Session, best_model_dir)
+                            self.lr *= self.human_decay
+
+
+                        print('--Avg. Accuracy loss =', str(now_acc)[:6], )
+                        self.resume['accur'].append(accuracy_array)
+                        self.resume['err'].append(np.sum(accuracy_array) / len(accuracy_array))
+                        valid_summary = self.Session.run([self.valid_merge])
+
+                        self.valid_writer.add_summary(valid_summary[0], epoch)
+                        self.valid_writer.flush()
+
+
             epochfinishTime = time.time()
             print('Epoch ' + str(epoch) + '/' + str(nEpochs) + ' done in ' + str(
                 int(epochfinishTime - epochstartTime)) + ' sec.' + ' -avg_time/batch: ' + str(
                 ((epochfinishTime - epochstartTime) / n_step_epoch))[:4] + ' sec.')
 
-            # with tf.name_scope('save'):
-            #     self.saver.save(self.Session, os.path.join(self.save_dir,self.name + '_' + str(epoch + 1)+
-            #                                                "_"+(str(avg_cost)[:6])))
-            accuracy_array = np.zeros([1,14])
             self.resume['loss'].append(loss)
 
             #####valid
-            if self.valid_record:
-                predictions = dict()
-                predictions['image_ids'] = []
-                predictions['annos'] = dict()
 
-                for i in range(5):#self.validIter
-                    accuracy_pred,val_out,val_size, val_name = self.Session.run([self.acc,self.valid_output.outputs,self.valid_size,self.valid_name])
-                    #print(np.array(accuracy_pred).shape)
-                    accuracy_array += np.array(accuracy_pred, dtype=np.float32) / self.validIter
-                    getjointcoord(val_out,val_size,val_name,predictions)
 
-                print('--Avg. Accuracy =', str((np.sum(accuracy_array) / len(accuracy_array)))[:6], )
-                self.resume['accur'].append(accuracy_pred)
-                self.resume['err'].append(np.sum(accuracy_array) / len(accuracy_array))
-                valid_summary = self.Session.run([self.valid_merge])
-
-                self.valid_writer.add_summary(valid_summary[0],epoch)
-                self.valid_writer.flush()
         coord.request_stop()
         coord.join(threads)
         self.Session.close()

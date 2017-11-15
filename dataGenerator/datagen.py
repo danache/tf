@@ -143,8 +143,6 @@ class DataGenerator():
                 example = tf.train.Example(features=tf.train.Features(feature=feature))
                 writer.write(example.SerializeToString())
                 self.number += 1
-            if index > 100:
-                break
             if index % 100 == 0:
                 print("creating -- %d" % (index))
         writer.close()

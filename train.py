@@ -31,7 +31,6 @@ def process_hourglass(conf_file):
     config = configparser.ConfigParser()
     config.read(conf_file)
     for section in config.sections():
-        print(section)
         if section == 'Network':
             for option in config.options(section):
                 params[option] = eval(config.get(section, option))
@@ -53,13 +52,15 @@ if __name__ == '__main__':
     print('--Parsing Config File')
     params = process_config('config.cfg')
     network_params = process_hourglass("hourglass.cfg")
-    print(params)
+    show_step = params["show_step"]
     train_data = DataGenerator(imgdir=params['train_img_path'], label_dir=params['label_dir'],
                                out_record=params['train_record'],num_txt=params['train_num_txt'],
-                               batch_size=params['batch_size'], name="train", is_aug=False,isvalid=False)
+                               batch_size=params['batch_size'], name="train", is_aug=False,isvalid=False,scale=
+                               params['scale'])
     valid_data = DataGenerator(imgdir=params['valid_img_path'], label_dir=params['valid_label'],
                                out_record=params['valid_record'],num_txt=params['valid_num_txt'],
-                               batch_size=params['batch_size'], name="valid", is_aug=False,isvalid=True)
+                               batch_size=params['batch_size'], name="valid", is_aug=False,isvalid=True,scale=
+                               params['scale'])
 
     img, hm = train_data.getData()
 
@@ -77,24 +78,9 @@ if __name__ == '__main__':
                               save_model_dir=params['model_save_path'],
                               resume="",#/media/bnrc2/_backup/golf/model/tiny_hourglass_21
                               gpu=params['gpus'],partnum=network_params['partnum'],
+                              val_label=params['valid_label']
                      )
         trainer.generateModel()
-        trainer.training_init(nEpochs=params['nepochs'],saveStep=params['saver_step'])
+        trainer.training_init(nEpochs=params['nepochs'],valStep=params['val_step'],showStep=show_step )
 
 
-
-    # dataset = DataGenerator(params['joint_list'], params['img_directory'], params['training_txt_file'])
-    # dataset._create_train_table()
-    # dataset._randomize()
-    # dataset._create_sets()
-    #
-    # model = HourglassModel(nFeat=params['nfeats'], nStack=params['nstacks'], nModules=params['nmodules'],
-    #                        nLow=params['nlow'], outputDim=params['num_joints'], batch_size=params['batch_size'],
-    #                        training=True, drop_rate=params['dropout_rate'], lear_rate=params['learning_rate'],
-    #                        decay=params['learning_rate_decay'], decay_step=params['decay_step'], dataset=dataset,
-    #                        name=params['name'], logdir_train=params['log_dir_train'],
-    #                        logdir_test=params['log_dir_test'], tiny=params['tiny'], modif=False)
-    # model.generate_model()
-    # model.training_init(nEpochs=params['nepochs'], epochSize=params['epoch_size'], saveStep=params['saver_step'],
-    #                     dataset=None)
-    #
