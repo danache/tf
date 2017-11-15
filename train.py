@@ -76,7 +76,7 @@ if __name__ == '__main__':
                               logdir_valid=params['valid_log_dir'],name='tiny_hourglass',
                               train_record=train_data,valid_record=valid_data,
                               save_model_dir=params['model_save_path'],
-                              resume="",#/media/bnrc2/_backup/golf/model/tiny_hourglass_21
+                              resume=params['resume'],#/media/bnrc2/_backup/golf/model/tiny_hourglass_21
                               gpu=params['gpus'],partnum=network_params['partnum'],
                               val_label=params['valid_label']
                      )

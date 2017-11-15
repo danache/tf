@@ -123,6 +123,7 @@ class train_class():
                 self._init_weight()
                 self.saver = tf.train.Saver()
                 if self.resume:
+                    print("resume from"+self.resume)
                     self.saver.restore(self.Session, self.resume)
                 self.train(nEpochs, valStep,showStep)
 
@@ -185,8 +186,9 @@ class train_class():
                         predictions = dict()
                         predictions['image_ids'] = []
                         predictions['annos'] = dict()
+                        val_begin_time = time.time()
 
-                        for i in range(self.validIter):  # self.validIter
+                        for i in range(5):  # self.validIter
                             val_percent = ((i + 1) / self.validIter) * 100
                             val_num = np.int(20 * val_percent / 100)
                             val_tToEpoch = int((time.time() - val_begin) * (100 - val_percent) / (val_percent))
@@ -203,7 +205,7 @@ class train_class():
                                 '%' + ' -cost: ' + str(accuracy_array)[:6] +
                                 ' -timeToEnd: ' + str(val_tToEpoch) + ' sec.')
                             sys.stdout.flush()
-
+                        print("val done in" + str(time.time() - val_begin_time))
                         score = getScore(predictions, anno, return_dict)
 
                         print("epoch %d, batch %d ,val score = %d" % (epoch, n_batch, score))
@@ -214,7 +216,7 @@ class train_class():
 
                             best_val = now_acc
                             best_model_dir = os.path.join(self.save_dir, self.name + '_' + str(epoch) +
-                                                             "_" + str(n_batch) +(str(now_acc)[:6]))
+                                                             "_" + str(n_batch) +"_"+(str(now_acc)[:6]))
                             print("get lower loss, save at " + best_model_dir)
                             with tf.name_scope('save'):
                                 self.saver.save(self.Session, best_model_dir)
@@ -229,7 +231,7 @@ class train_class():
                         self.resume['err'].append(np.sum(accuracy_array) / len(accuracy_array))
                         valid_summary = self.Session.run([self.valid_merge])
 
-                        self.valid_writer.add_summary(valid_summary[0], epoch)
+                        self.valid_writer.add_summary(valid_summary[0], epoch * n_step_epoch + n_batch)
                         self.valid_writer.flush()
 
 
