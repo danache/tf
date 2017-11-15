@@ -78,7 +78,7 @@ if __name__ == '__main__':
                               save_model_dir=params['model_save_path'],
                               resume=params['resume'],#/media/bnrc2/_backup/golf/model/tiny_hourglass_21
                               gpu=params['gpus'],partnum=network_params['partnum'],
-                              val_label=params['valid_label']
+                              val_label=params['valid_label'],human_decay=params['human_decay']
                      )
         trainer.generateModel()
         trainer.training_init(nEpochs=params['nepochs'],valStep=params['val_step'],showStep=show_step )
