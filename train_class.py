@@ -216,7 +216,7 @@ class train_class():
 
                             best_val = now_acc
                             best_model_dir = os.path.join(self.save_dir, self.name + '_' + str(epoch) +
-                                                             "_" + str(n_batch) +"_"+(str(now_acc)[:6]))
+                                                             "_" + str(n_batch) +"_"+(str(now_acc)[:8]))
                             print("get lower loss, save at " + best_model_dir)
                             with tf.name_scope('save'):
                                 self.saver.save(self.Session, best_model_dir)
