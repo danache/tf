@@ -5,35 +5,19 @@ import os
 import cv2
 import tensorlayer as tl
 from tensorlayer.layers import Conv2d as conv_2d
-from models.layers.Residual import Residual
+from hg_models.layers.Residual import Residual
 from dataGenerator.datagen import DataGenerator
 from eval.eval import accuracy_computation
 
 class HourglassModel():
     def __init__(self, nFeat=256, nStack=4, nModules=1, outputDim=14,
                  ):
-        """ Initializer
-        Args:
-            nStack				: number of stacks (stage/Hourglass modules)
-            nFeat				: number of feature channels on conv layers
-            nLow				: number of downsampling (pooling) per module
-            outputDim			: number of output Dimension (16 for MPII)
-            batch_size			: size of training/testing Batch
-            dro_rate			: Rate of neurons disabling for Dropout Layers
-            lear_rate			: Learning Rate starting value
-            decay				: Learning Rate Exponential Decay (decay in ]0,1], 1 for constant learning rate)
-            decay_step			: Step to apply decay
-            dataset			: Dataset (class DataGenerator)
-            training			: (bool) True for training / False for prediction
-            w_summary			: (bool) True/False for summary of weight (to visualize in Tensorboard)
-            tiny				: (bool) Activate Tiny Hourglass
-            modif				: (bool) Boolean to test some network modification # DO NOT USE IT ! USED TO TEST THE NETWORK
-            name				: name of the model
-        """
+
         self.nStack = nStack
         self.nFeats = nFeat
         self.nModules = nModules
         self.partnum = outputDim
+
 
     def hourglass(self, data, n, f, name="",reuse=False):
         with tf.variable_scope(name, reuse=reuse):
@@ -120,7 +104,7 @@ class HourglassModel():
         # end = tl.layers.StackLayer([out])
         return end
 
-
+"""
     def generateModel(self):
         generate_time = time.time()
         #####生成训练数据
@@ -188,14 +172,7 @@ class HourglassModel():
 
 
     def training_init(self, nEpochs=10, saveStep=10):
-        """ Initialize the training
-        Args:
-            nEpochs		: Number of Epochs to train
-            epochSize		: Size of one Epoch
-            saveStep		: Step to save 'train' summary (has to be lower than epochSize)
-            dataset		: Data Generator (see generator.py)
-            load			: Model to load (None if training from scratch) (see README for further information)
-        """
+
         with tf.name_scope('Session'):
             for i in self.gpu:
                 with tf.device(i):
@@ -250,7 +227,7 @@ class HourglassModel():
                 new_img[:, left:right, :] = tmp
             hg = self.Session.run(pred_sigmoid,
                                      feed_dict={img: np.expand_dims(new_img / 255, axis=0)})
-            j = np.ones(shape=(opt.partnum, 2)) * -1
+            j = np.ones(shape=(self.partnum, 2)) * -1
 
             for i in range(len(j)):
                 idx = np.unravel_index(hg[0, :, :, i].argmax(), (64, 64))
@@ -259,3 +236,4 @@ class HourglassModel():
                     cv2.circle(img_res, center=tuple(j[i].astype(np.int))[::-1], radius=5, color=self.color[i],
                                    thickness=-1)
 
+"""

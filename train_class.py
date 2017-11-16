@@ -174,7 +174,6 @@ class train_class():
             avg_cost = 0.
 
             for n_batch in range(n_step_epoch):#n_step_epoch
-                print("self.learning rate = "+str(self.Session.run(self.lr)))
 
 
                 percent = ((n_batch + 1) / n_step_epoch) * 100

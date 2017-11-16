@@ -3,7 +3,6 @@ import tensorlayer as tl
 from tensorlayer.layers import Conv2d as conv_2d
 
 import numpy as np
-import opt
 
 def replicate(input, numIn, dim, name,reuse=False):
     with tf.variable_scope(name,reuse=reuse) as scope:
@@ -37,21 +36,26 @@ def AttentionIter(data, numin,lrnSize, iterSize,name="",reuse=False):
             Q_tmp.outputs = lsigmoid(Q_tmp.outputs)
             Q.append(Q_tmp)
 
-        replicat = replicate(Q[iterSize - 1], numin, -1,name='_replicate',reuse=reuse)  # ******Q[itersize]-->Q[itersize-1]  2-->3
+        # tmp = []
+        # for i in range(numin):
+        #     tmp.append(Q[iterSize - 1])
+        #     replicat = tl.layers.StackLayer(tmp, axis=1, name="%s_stack_layer" % (name))
+        #replicat = replicate(Q[iterSize - 1], numin, -1,name='_replicate',reuse=reuse)  # ******Q[itersize]-->Q[itersize-1]  2-->3
+
+        replicat=tl.layers.ConcatLayer([Q[iterSize - 1]] * numin, -1, name="%s_stack_layer" % (name))
         pheat = tl.layers.ElementwiseLayer(layer=[data, replicat],
-                                   combine_fn=tf.multiply, name="%s_add_layer" % (name))
+                                   combine_fn=tf.multiply, name="%s_end_add_layer" % (name))
 
         return pheat
 
 
-def AttentionPartsCRF(data,numin,lrnSize, iterSize, usepart,name="",reuse=False):
+def AttentionPartsCRF(data,numin,lrnSize, iterSize, usepart,partnum = 14,name="",reuse=False):
 
     if usepart == 0:
         return AttentionIter(data,numin,lrnSize,iterSize=iterSize,name="%s_Attention"%(name),reuse=reuse)
     else:
 
         with tf.variable_scope(name, reuse=reuse) as scope:
-            partnum = opt.partnum
             pre = []
             for i in range(partnum):
                 att = AttentionIter(data=data,numin=numin,lrnSize=lrnSize, iterSize=iterSize,name="%s_Attention_%d"%(name,i),reuse=reuse)

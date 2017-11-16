@@ -1,6 +1,5 @@
 # coding:utf8
 import numpy as np
-from config import opt
 
 
 def val_input_convert(predictions_in):

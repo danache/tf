@@ -1,4 +1,4 @@
-from models.hgattention import createModel
+from hg_models.hgattention import createModel
 import tensorlayer as tl
 import numpy as np
 import tensorflow as tf
