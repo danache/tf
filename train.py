@@ -6,7 +6,7 @@ import tensorflow as tf
 from four_stack.Hourglass import HourglassModel
 from train_class import train_class
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 def process_config(conf_file):
     params = {}
     config = configparser.ConfigParser()

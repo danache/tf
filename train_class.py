@@ -8,7 +8,7 @@ import tensorlayer as tl
 
 from eval.eval import accuracy_computation
 from eval.ht2coord import getjointcoord
-
+from tools.lr import get_lr
 from tools.keypoint_eval import getScore
 from tools.keypoint_eval import load_annotations
 class train_class():
@@ -20,6 +20,7 @@ class train_class():
         self.batch_size = batch_size
         self.nstack = nstack
         self.learn_r = learn_rate
+
         self.lr_decay = decay
         self.lr_decay_step = decay_step
         self.logdir_train = logdir_train
@@ -38,6 +39,7 @@ class train_class():
         self.val_label = val_label
         self.mae = tf.Variable(0, dtype=tf.float32)
         self.human_decay = human_decay
+
     def generateModel(self):
         generate_time = time.time()
         train_data = self.train_record
@@ -45,9 +47,17 @@ class train_class():
         train_img, train_heatmap = train_data.getData()
 
         self.train_output = self.model(train_img)
+
+        self.h_decay = tf.Variable(1.,tf.float32, )
+
+        self.last_learning_rate = tf.Variable(self.learn_r,tf.float32, )
+
+
+
         generate_train_done_time = time.time()
         print('train data generate in ' + str(int(generate_train_done_time - generate_time)) + ' sec.')
         print("train num is %d" % (self.train_num))
+        self.global_step = 0
         #####生成验证数据
         if self.valid_record:
             valid_data = self.valid_record
@@ -75,24 +85,27 @@ class train_class():
                         for i in range(self.partnum):
                             tf.summary.scalar(self.joints[i],self.acc[i], collections = ['test'])
 
-                with tf.name_scope('Session'):
-                    with tf.name_scope('steps'):
-                        self.train_step = tf.Variable(0, name='global_step', trainable=False)
+
                 with tf.name_scope('lr'):
-                    self.lr = tf.train.exponential_decay(self.learn_r, self.train_step, self.lr_decay_step, self.lr_decay,
-                                   staircase=True, name='learning_rate')
+                     #self.lr = tf.train.exponential_decay(self.learn_r, self.train_step, self.lr_decay_step,
+                     #                                    self.lr_decay,name='learning_rate')
+
+                    self.lr = get_lr(self.last_learning_rate, self.global_step, self.lr_decay_step,
+                                      self.lr_decay,self.h_decay,name='learning_rate')
+
                 with tf.name_scope('rmsprop'):
-                    self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr)
-                with tf.name_scope('minimizer'):
-                    self.update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-                    with tf.control_dependencies(self.update_ops):
-                        self.train_rmsprop = self.rmsprop.minimize(self.loss, self.train_step)
+                    self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr).minimize(self.loss)
+                # with tf.name_scope('minimizer'):
+                #     self.update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+                #     with tf.control_dependencies(self.update_ops):
+                #         self.train_rmsprop = self.rmsprop.minimize(self.loss)
 
         with tf.device(self.cpu):
             with tf.name_scope('training'):
                 #print(type(self.loss))
                 tf.summary.scalar('loss', self.loss, collections=['train'])
                 tf.summary.scalar('learning_rate', self.lr, collections=['train'])
+
             with tf.name_scope('summary'):
                 for i in range(self.nstack):
                     tf.summary.scalar("stack%d"%i, self.stack_loss[i], collections=['train'])
@@ -117,7 +130,6 @@ class train_class():
         print("init done")
 
     def training_init(self, nEpochs=10, valStep=3000,showStep=10):
-        print(showStep)
         with tf.name_scope('Session'):
             with tf.device(self.gpu[0]):
                 self._init_weight()
@@ -152,14 +164,19 @@ class train_class():
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord, sess=self.Session)
         self.Session.run(init)
-
+        last_lr = self.learn_r
+        hm_decay = 1
         for epoch in range(nEpochs):
+            self.global_step += 1
             epochstartTime = time.time()
             print('Epoch :' + str(epoch) + '/' + str(nEpochs) + '\n')
             loss = 0
             avg_cost = 0.
 
             for n_batch in range(n_step_epoch):#n_step_epoch
+                print("self.learning rate = "+str(self.Session.run(self.lr)))
+
+
                 percent = ((n_batch + 1) / n_step_epoch) * 100
                 num = np.int(20 * percent / 100)
                 tToEpoch = int((time.time() - epochstartTime) * (100 - percent) / (percent))
@@ -170,13 +187,16 @@ class train_class():
                 sys.stdout.flush()
 
                 if n_batch % showStep == 0:
-                    _,lo ,sta_lo, part_lo,summary= self.Session.run\
-                        ([self.train_rmsprop,self.loss,self.stack_loss,self.part_loss,self.train_merged])
+                    _,lo ,sta_lo, part_lo,summary,last_lr= self.Session.run\
+                        ([self.rmsprop,self.loss,self.stack_loss,self.part_loss,self.train_merged,self.lr],
+                         feed_dict={self.last_learning_rate : last_lr, self.h_decay:hm_decay})
+
                     self.train_writer.add_summary(summary, epoch * n_step_epoch + n_batch)
                     self.train_writer.flush()
 
                 else:
-                    _, lo = self.Session.run([self.train_rmsprop, self.loss])
+                    _, lo , last_lr= self.Session.run([self.rmsprop, self.loss,self.lr],
+                                             feed_dict={self.last_learning_rate : last_lr, self.h_decay:hm_decay})
                 loss += lo
                 avg_cost += lo / n_step_epoch
                 if (n_batch+1) % valStep == 0:
@@ -193,8 +213,9 @@ class train_class():
                             val_num = np.int(20 * val_percent / 100)
                             val_tToEpoch = int((time.time() - val_begin) * (100 - val_percent) / (val_percent))
 
-                            accuracy_pred, val_out, val_size, val_name = self.Session.run(
-                                [self.acc, self.valid_output.outputs, self.valid_size, self.valid_name])
+                            accuracy_pred, val_out, val_size, val_name,last_lr = self.Session.run(
+                                [self.acc, self.valid_output.outputs, self.valid_size, self.valid_name,self.lr],
+                                feed_dict={self.last_learning_rate: last_lr, self.h_decay: hm_decay})
                             # print(np.array(accuracy_pred).shape)
                             accuracy_array += np.array(accuracy_pred, dtype=np.float32) / self.validIter
                             predictions = getjointcoord(val_out, val_size, val_name, predictions)
@@ -220,10 +241,13 @@ class train_class():
                             print("get lower loss, save at " + best_model_dir)
                             with tf.name_scope('save'):
                                 self.saver.save(self.Session, best_model_dir)
+                            hm_decay = 1.
                         else:
                             print("now val loss is not best, restore model from" + best_model_dir)
                             self.saver.restore(self.Session, best_model_dir)
-                            self.lr *= self.human_decay
+                            hm_decay = self.human_decay
+
+
 
 
                         print('--Avg. Accuracy loss =', str(now_acc)[:6], )
