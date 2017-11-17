@@ -7,7 +7,7 @@ def MSE( output, target, nstack = 4, partnum=14,is_mean=False):
     with tf.name_scope("mean_squared_error_loss"):
         if output.get_shape().ndims == 5:  # [batch_size, n_feature]
             if is_mean:
-                allloss = 0#tf.Variable([0.],tf.float32)
+                allloss = tf.Variable([0.],trainable=False,dtype=tf.float32)
                 stack_loss = [0.]*nstack
                 part_loss = [0.]*partnum
 

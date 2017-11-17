@@ -118,7 +118,7 @@ class HGattention():
             ##########################################################3
             for i in range(self.nStack):
 
-                hg = self.hourglass(data=inter[i],n=nPool,f=self.nFeats,imsize=self.partnum,nModual=int(nModual),name="hourglass%d" %(i))#n=nPool,f=opt.nFeats,imsize=opt.outputRes,nModual=int(nModual))
+                hg = self.hourglass(data=inter[i],n=nPool,f=self.nFeats,imsize=self.partnum,nModual=int(nModual),name="hourglass%d" %(i),reuse=reuse)#n=nPool,f=opt.nFeats,imsize=opt.outputRes,nModual=int(nModual))
 
                 if i == self.nStack - 1:
                     ll1 = self.lin(hg,self.nFeats * 2,name="hourglass%d_lin1"%(i),reuse=reuse)

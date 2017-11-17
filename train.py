@@ -7,7 +7,7 @@ from four_stack.Hourglass import HourglassModel
 from train_class import train_class
 from hg_models.hgattention import HGattention
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 def process_config(conf_file):
     params = {}
     config = configparser.ConfigParser()
@@ -52,8 +52,8 @@ tf.app.flags.DEFINE_string('resume',
 if __name__ == '__main__':
     print('--Parsing Config File')
     params = process_config('./config/config.cfg')
-    #network_params = process_hourglass("hourglass.cfg")
-    network_params = process_network("./config/hgattention.cfg")
+    network_params = process_network("./config/hourglass.cfg")
+    #network_params = process_network("./config/hgattention.cfg")
 
     show_step = params["show_step"]
     train_data = DataGenerator(imgdir=params['train_img_path'], label_dir=params['label_dir'],
@@ -68,12 +68,12 @@ if __name__ == '__main__':
     img, hm = train_data.getData()
 
 
-    #model = HourglassModel(nFeat=network_params['nfeats'], nStack=network_params['nstack'],
-    #                        nModules=network_params['nmodules'],outputDim=network_params['partnum'])._graph_hourglass
+    model = HourglassModel(nFeat=network_params['nfeats'], nStack=network_params['nstack'],
+                           nModules=network_params['nmodules'],outputDim=network_params['partnum'])._graph_hourglass
 
-    model = HGattention(nFeat=network_params['nfeats'], nStack=network_params['nstack'],
-                        nModules=network_params['nmodules'],outputDim=network_params['partnum'],
-                        npool=network_params['npool'], lrnker=network_params['lrnker']).createModel
+    # model = HGattention(nFeat=network_params['nfeats'], nStack=network_params['nstack'],
+    #                     nModules=network_params['nmodules'],outputDim=network_params['partnum'],
+    #                     npool=network_params['npool'], lrnker=network_params['lrnker']).createModel
     if FLAGS.mode == 'train':
         trainer = train_class(model=model, nstack=network_params['nstack'], batch_size=params['batch_size'],
                               learn_rate=params['lear_rate'], decay=params['decay'],

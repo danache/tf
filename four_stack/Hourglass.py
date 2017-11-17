@@ -80,11 +80,12 @@ class HourglassModel():
             # Storage Table
 
             out = []
-            inter = r3
+
+            inter = [r3]
         with tf.variable_scope("stack", reuse=reuse):
             for i in range(self.nStack):
                 with tf.name_scope('stage_%d' % (i)):
-                    hg = self.hourglass(inter, n=4, f=self.nFeats, name="stage_%d_hg" % (i),reuse=reuse)
+                    hg = self.hourglass(inter[i], n=4, f=self.nFeats, name="stage_%d_hg" % (i),reuse=reuse)
 
                     tmpr1 = Residual(hg, self.nFeats, self.nFeats, name="stage_%d_Residual1" % (i))
                     ll = self.lin(tmpr1, self.nFeats, name="stage_%d_lin1" % (i),reuse=reuse)
@@ -96,8 +97,8 @@ class HourglassModel():
                                       name="stage_%d_ll_" % (i))
                         tmpOut_ = conv_2d(tmpout, self.nFeats, filter_size=(1, 1), strides=(1, 1),
                                           name="stage_%d_tmpOut_" % (i))
-                        inter = tl.layers.ElementwiseLayer(layer=[inter, ll_, tmpOut_],
-                                                           combine_fn=tf.add, name="stage_%d_add_n" % (i))
+                        inter.append(tl.layers.ElementwiseLayer(layer=[inter[i], ll_, tmpOut_],
+                                                           combine_fn=tf.add, name="stage_%d_add_n" % (i)))
 
         # end = out[0]
         end = tl.layers.StackLayer(out, axis=1, name='final_output')
