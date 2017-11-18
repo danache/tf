@@ -15,7 +15,7 @@ class train_class():
     def __init__(self, model, nstack=4, batch_size=32,learn_rate=2.5e-4, decay=0.96, decay_step=2000,
                  logdir_train="./log/train.log", logdir_valid="./log/test.log",
                 name='tiny_hourglass', train_record="",valid_record="",save_model_dir="",resume="",gpu=[0],
-                 val_label="",partnum=14,human_decay=0.96
+                 val_label="",partnum=14,human_decay=0.96,val_batch_num=10000
                  ):
         self.batch_size = batch_size
         self.nstack = nstack
@@ -39,9 +39,10 @@ class train_class():
         self.val_label = val_label
         self.mae = tf.Variable(0, trainable=False, dtype=tf.float32,)
         self.human_decay = human_decay
-        self.loss = dict()
-        self.stack_loss =dict()
-        self.part_loss = dict()
+        self.loss = []
+        self.stack_loss =[]
+        self.part_loss = []
+        self.val_batch_num=val_batch_num
 
     def average_gradients(self,tower_grads):
         """Calculate the average gradient for each shared variable across all towers.
@@ -97,7 +98,6 @@ class train_class():
         print('train data generate in ' + str(int(generate_train_done_time - generate_time)) + ' sec.')
         print("train num is %d" % (self.train_num))
         self.global_step = 0
-        #####生成验证数据
 
 
         tower_grads = []
@@ -126,15 +126,20 @@ class train_class():
                                 allloss, stack_loss, part_loss = MSE.MSE(output=self.train_output.outputs, target=train_heatmap,
                                                     nstack=self.nstack, partnum=self.partnum,is_mean=True)
 
-                                self.loss[i] = allloss
-                                self.stack_loss[i] = stack_loss
-                                self.part_loss[i] = part_loss
+                                self.loss.append(allloss[0])
+                                self.stack_loss.append(stack_loss)
+                                self.part_loss.append(part_loss)
+                                with tf.name_scope('training'):
+                                    # print(type(self.loss))
+                                    tf.summary.scalar('loss_%d' % (i), self.loss[i], collections=['train'])
+
                         tf.get_variable_scope().reuse_variables()
 
                         grads = self.rmsprop.compute_gradients(loss= self.loss[i])
                         tower_grads.append(grads)
         grads_ = self.average_gradients(tower_grads)
         self.apply_gradient_op = self.rmsprop.apply_gradients(grads_)
+
         if self.valid_record:
             valid_data = self.valid_record
             valid_img, valid_ht,self.valid_size, self.valid_name = valid_data.getData()
@@ -144,7 +149,6 @@ class train_class():
             generate_valid_done_time = time.time()
             print('train data generate in ' + str(int(generate_valid_done_time - generate_train_done_time )) + ' sec.')
             print("valid num is %d" % (self.valid_num))
-        if self.valid_record:
             with tf.name_scope('acc'):
                 self.acc = accuracy_computation(self.valid_output.outputs, valid_ht, batch_size=self.batch_size,
                                                 nstack=self.nstack)
@@ -152,19 +156,20 @@ class train_class():
                 for i in range(self.partnum):
                     tf.summary.scalar(self.joints[i], self.acc[i], collections=['test'])
 
-        # with tf.device(self.cpu):
-        #     with tf.name_scope('training'):
-        #         #print(type(self.loss))
-        #         #tf.summary.scalar('loss', self.loss, collections=['train'])
-        #         tf.summary.scalar('learning_rate', self.lr, collections=['train'])
-        #
-        #     # with tf.name_scope('summary'):
-        #     #     for i in range(self.nstack):
-        #     #         tf.summary.scalar("stack%d"%i, self.stack_loss[i], collections=['train'])
-        #     #     for j in range(self.partnum):
-        #     #         tf.summary.scalar(self.joints[i], self.part_loss[j], collections=['train'])
-        #     with tf.name_scope('MAE'):
-        #         tf.summary.scalar("MAE", self.mae, collections=['test'])
+        with tf.device(self.cpu):
+
+            with tf.name_scope('training'):
+                # print(type(self.loss))
+                #tf.summary.scalar('loss_0', self.loss[0], collections=['train'])
+                tf.summary.scalar('learning_rate', self.lr, collections=['train'])
+
+            # with tf.name_scope('summary'):
+            #     for i in range(self.nstack):
+            #         tf.summary.scalar("stack%d"%i, self.stack_loss[i], collections=['train'])
+            #     for j in range(self.partnum):
+            #         tf.summary.scalar(self.joints[i], self.part_loss[j], collections=['train'])
+            with tf.name_scope('MAE'):
+                tf.summary.scalar("MAE", self.mae, collections=['test'])
 
         self.train_merged = tf.summary.merge_all('train')
         self.valid_merge = tf.summary.merge_all('test')
@@ -192,7 +197,7 @@ class train_class():
                 self.train(nEpochs, valStep,showStep)
 
     def train(self, nEpochs=10, valStep = 3000,showStep=10 ):
-        best_val = open("./best_val.txt", "w")
+        #best_val = open("./best_val.txt", "w")
         best_model_dir = ""
         best_val = 99999
         #####参数定义
@@ -218,6 +223,10 @@ class train_class():
         self.Session.run(init)
         last_lr = self.learn_r
         hm_decay = 1
+        if self.validIter < self.val_batch_num:
+            val_batch_num = self.validIter
+        else:
+            val_batch_num = self.val_batch_num
         for epoch in range(nEpochs):
             self.global_step += 1
             epochstartTime = time.time()
@@ -249,6 +258,7 @@ class train_class():
                     _, lo , last_lr = self.Session.run([self.apply_gradient_op, self.loss,self.lr],
                                              feed_dict={self.last_learning_rate : last_lr, self.h_decay:hm_decay})
                 loss += lo[0]
+                hm_decay = 1.
                 avg_cost += lo[0] / n_step_epoch
                 if (n_batch+1) % valStep == 0:
                     if self.valid_record:
@@ -259,16 +269,17 @@ class train_class():
                         predictions['annos'] = dict()
                         val_begin_time = time.time()
 
-                        for i in range(5):  # self.validIter
-                            val_percent = ((i + 1) / self.validIter) * 100
+                        for i in range(val_batch_num):  # self.validIter
+                            val_percent = ((i + 1) / val_batch_num) * 100
                             val_num = np.int(20 * val_percent / 100)
                             val_tToEpoch = int((time.time() - val_begin) * (100 - val_percent) / (val_percent))
 
                             accuracy_pred, val_out, val_size, val_name,last_lr = self.Session.run(
                                 [self.acc, self.valid_output.outputs, self.valid_size, self.valid_name,self.lr],
                                 feed_dict={self.last_learning_rate: last_lr, self.h_decay: hm_decay})
+
                             # print(np.array(accuracy_pred).shape)
-                            accuracy_array += np.array(accuracy_pred, dtype=np.float32) / self.validIter
+                            accuracy_array += np.array(accuracy_pred, dtype=np.float32) / val_batch_num
                             predictions = getjointcoord(val_out, val_size, val_name, predictions)
                             sys.stdout.write(
                                 '\r valid {0}>'.format("=" * val_num) + "{0}>".format(" " * (20 - val_num)) + '||' + str(
@@ -293,10 +304,10 @@ class train_class():
                             with tf.name_scope('save'):
                                 self.saver.save(self.Session, best_model_dir)
                             hm_decay = 1.
-                        else:
-                            print("now val loss is not best, restore model from" + best_model_dir)
-                            self.saver.restore(self.Session, best_model_dir)
-                            hm_decay = self.human_decay
+                        # else:
+                        #     print("now val loss is not best, restore model from" + best_model_dir)
+                        #     self.saver.restore(self.Session, best_model_dir)
+                        #     hm_decay = self.human_decay
 
 
 

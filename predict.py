@@ -1,26 +1,82 @@
-from hg_models.hgattention import createModel
-import tensorlayer as tl
-import numpy as np
+import time
+import sys
+sys.path.append(sys.path[0])
+del sys.path[0]
+import configparser
+from dataGenerator.datagen import DataGenerator
 import tensorflow as tf
 from four_stack.Hourglass import HourglassModel
-# img = tf.placeholder(tf.float32, shape=[1, 256, 256,3],name='x')
-# label = tf.placeholder(tf.float32, shape=[1, 8,14,64, 64])
-#
-# y = createModel(img)
-# ce = tf.reduce_mean(tf.nn.l2_loss(y, label))
-# with tf.Session() as sess:
-#     sess.run(tf.initialize_all_variables())
+from train_class import train_class
+from predict_class import test_class
+import os
+#os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+def process_config(conf_file):
+    params = {}
+    config = configparser.ConfigParser()
+    config.read(conf_file)
+    for section in config.sections():
+        if section == 'DataSetHG':
+            for option in config.options(section):
+                params[option] = eval(config.get(section, option))
+        if section == 'log':
+            for option in config.options(section):
+                params[option] = eval(config.get(section, option))
+        if section == 'Saver':
+            for option in config.options(section):
+                params[option] = eval(config.get(section, option))
+        if section == 'Training setting':
+            for option in config.options(section):
+                params[option] = eval(config.get(section, option))
+    return params
 
-train_img_path = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoint_train_images_20170902"
-label_dir = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoint_train_annotations_20170909.json"
-train_record = "/media/bnrc2/_backup/ai/mu/train.tfrecords"
-valid_img_path = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_validation_20170911/keypoint_validation_images_20170911/"
-valid_label = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_validation_20170911/keypoint_validation_annotations_20170911.json"
-valid_record = "/media/bnrc2/_backup/ai/mu/valid.tfrecords"
+def process_network(conf_file):
+    params = {}
+    config = configparser.ConfigParser()
+    config.read(conf_file)
+    for section in config.sections():
+        if section == 'Network':
+            for option in config.options(section):
+                params[option] = eval(config.get(section, option))
+    return params
+# FLAGS参数设置
+FLAGS = tf.app.flags.FLAGS
+# 数据集类型
 
-model = HourglassModel(train_img_path="/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoint_train_images_20170902"
-,train_label_path=label_dir,train_record=train_record,
-                       valid_img_path=valid_img_path, valid_label_path=valid_label, valid_record=valid_record,
-                       model_dir="/media/bnrc2/_backup/golf/model/",resume="/media/bnrc2/_backup/golf/resume/tiny_hourglass_19")
-#model.generateModel()
-model.predict(img_dir=,load="/media/bnrc2/_backup/golf/resume/tiny_hourglass_19")
+# 模式：训练、测试
+tf.app.flags.DEFINE_string('mode',
+                           'train',
+                           'train or eval.')
+# resume
+tf.app.flags.DEFINE_string('resume',
+                           '',
+                           'restore model path')
+
+if __name__ == '__main__':
+    print('--Parsing Config File')
+    params = process_config('./config/config.cfg')
+    network_params = process_network("./config/hourglass.cfg")
+    #network_params = process_network("./config/hgattention.cfg")
+
+    show_step = params["show_step"]
+    test_data = DataGenerator(imgdir=params['train_img_path'], label_dir=params['label_dir'],
+                               out_record="/media/bnrc2/_backup/ai/mu/test.tfrecords",
+                               num_txt="/media/bnrc2/_backup/ai/mu/test_num.txt",
+                               batch_size=params['batch_size'], name="train", is_aug=False,isvalid=True,scale=
+                               params['scale'])
+
+
+    model = HourglassModel(nFeat=network_params['nfeats'], nStack=network_params['nstack'],
+                           nModules=network_params['nmodules'],outputDim=network_params['partnum'])._graph_hourglass
+
+
+    test = test_class(model=model, nstack=network_params['nstack'],
+                         test_record=test_data,
+                              resume=params['resume'],#/media/bnrc2/_backup/golf/model/tiny_hourglass_21
+                              gpu=params['gpus'],partnum=network_params['partnum'],
+                             )
+
+
+    test.generateModel()
+    test.training_init()
+
+

@@ -61,12 +61,12 @@ class HourglassModel():
             conv1 = conv_2d(data, 64, filter_size=(6, 6), strides=(2, 2), padding="SAME", name="conv1")
 
             bn1 = tl.layers.BatchNormLayer(conv1, name="bn1", act=tf.nn.relu)
-            with tf.name_scope('train'):
-                tf.summary.histogram("conv1_bn/weight", conv1.all_params[0], collections=['train'])
-                tf.summary.histogram('conv1_bn', bn1.outputs, collections=['train'])
+            # with tf.name_scope('train'):
+            #     tf.summary.histogram("conv1_bn/weight", conv1.all_params[0], collections=['train'])
+            #     tf.summary.histogram('conv1_bn', bn1.outputs, collections=['train'])
             r1 = Residual(bn1, 64, 128, name="Residual1",reuse=reuse)
-            with tf.name_scope('train'):
-                tf.summary.histogram('residual1', r1.outputs, collections=['train'])
+            # with tf.name_scope('train'):
+            #     tf.summary.histogram('residual1', r1.outputs, collections=['train'])
 
             pool = tl.layers.MaxPool2d(r1, (2, 2), strides=(2, 2), name="pool1")
 
@@ -79,9 +79,9 @@ class HourglassModel():
                     # return r3
             # Storage Table
 
-            out = []
+        out = []
 
-            inter = [r3]
+        inter = [r3]
         with tf.variable_scope("stack", reuse=reuse):
             for i in range(self.nStack):
                 with tf.name_scope('stage_%d' % (i)):

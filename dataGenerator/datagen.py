@@ -15,7 +15,7 @@ import tensorlayer as tl
 """
 class DataGenerator():
     def __init__(self, imgdir=None, label_dir=None, out_record=None, num_txt="",nstack = 4,resize=256,scale=0.25, flipping=False,
-                 color_jitting=30,rotate=30,batch_size=32,name="",is_aug=True, isvalid=False):
+                 color_jitting=30,rotate=30,batch_size=32,name="",is_aug=True, isvalid=False,refine_num=None):
         self.nstack = nstack
         if is_aug:
 
@@ -33,6 +33,9 @@ class DataGenerator():
         self.resize = resize
         self.batch_size = batch_size
         self.name = name
+        self.refine_num = refine_num
+        if self.refine_num:
+            print("max num is " + str(refine_num))
         if os.path.exists(out_record):
             print(out_record)
             print("record file exist!!")
@@ -48,7 +51,7 @@ class DataGenerator():
             self.record_path = out_record
 
     def getData(self):
-        return self.read_and_decode(filename=self.record_path,img_size=self.resize,flipping=True,scale=self.scale,
+        return self.read_and_decode(filename=self.record_path,img_size=self.resize,flipping=self.flipping,scale=self.scale,
                                     color_jitting=self.color_jitting,rotate=self.rotate, batch_size=self.batch_size,
                                     isvalid=self.isvalid)
     def getN(self):
@@ -60,7 +63,6 @@ class DataGenerator():
     #     #包括resize to size, scaling ,fliping, color jitting, rotate,
 
     def generageRecord(self,imgdir, label_tmp, out_record, extension=0.3, resize=256):
-        print(label_tmp)
         writer = tf.python_io.TFRecordWriter(out_record)
         self.number = 0
         label_tmp = pd.read_json(label_tmp)
@@ -71,6 +73,7 @@ class DataGenerator():
             img_path = os.path.join(imgdir, row["image_id"] + ".jpg")
 
             img = cv2.imread(img_path)
+
             w, h = img.shape[1], img.shape[0]
             keypoint = row["keypoint_annotations"]
             i = 0
@@ -112,25 +115,49 @@ class DataGenerator():
 
                 tmp = cv2.resize(human, newsize)
                 new_img = np.zeros((resize, resize, 3))
+
+                """
+                中间补0,舍弃，以后用stn变换取代
                 if (tmp.shape[0] < resize):  # 高度不够，需要补0。则要对item[6:]中的第二个值进行修改
                     up = np.int((resize - tmp.shape[0]) * 0.5)
                     down = np.int((resize + tmp.shape[0]) * 0.5)
                     new_img[up:down, :, :] = tmp
                     for j in range(len(ankle)):
                         if j % 3 == 1:
-                            ankle[j] = (tmp.shape[0] * ankle[j] * 1. + 0.5 * (resize - tmp.shape[0])) / resize
+                            ankle[j] = (tmp.shape[0] * ankle[j] * 1. + 0.5 * (resize - tmp.shape[0])) * 1./ resize
                 elif (tmp.shape[1] < resize):
                     left = np.int((resize - tmp.shape[1]) * 0.5)
                     right = np.int((resize + tmp.shape[1]) * 0.5)
                     new_img[:, left:right, :] = tmp
                     for j in range(len(ankle)):
                         if j % 3 == 0:
-                            ankle[j] = (tmp.shape[1] * ankle[j] * 1. + 0.5 * (resize - tmp.shape[1])) / resize
+                            ankle[j] = (tmp.shape[1] * ankle[j] * 1. + 0.5 * (resize - tmp.shape[1])) * 1./ resize
                             # print(ankle)
                             #             for j in range(14):
                             #                 coord = ankle[j * 3: j * 3 + 2]
                             #                 if coord[-1] != 2:
                             #                     human = cv2.circle(new_img,(int(coord[0] * resize),int(coord[1]* resize)),10,(255,0,255),-1)
+                """
+                ####放在左上角
+                if (tmp.shape[0] < resize):  # 高度不够，需要补0。则要对item[6:]中的第二个值进行修改
+                    up = 0
+                    down = tmp.shape[0]
+                    new_img[up:down, :, :] = tmp
+                    for j in range(len(ankle)):
+                        if j % 3 == 1:
+                            ankle[j] = (tmp.shape[0] * ankle[j] * 1.) * 1. / resize
+                elif (tmp.shape[1] < resize):
+                    left = 0
+                    right = tmp.shape[1]
+                    new_img[:, left:right, :] = tmp
+                    for j in range(len(ankle)):
+                        if j % 3 == 0:
+                            ankle[j] = (tmp.shape[1] * ankle[j] * 1.) * 1. / resize
+
+
+
+
+
                 new_img = new_img.astype(np.uint8)
                 img_size = [ w,h,x1, y1, board_w,board_h,newsize[0], newsize[1]]
                 feature = {
@@ -145,6 +172,9 @@ class DataGenerator():
                 self.number += 1
             if index % 100 == 0:
                 print("creating -- %d" % (index))
+            if self.refine_num :
+                if index > self.refine_num:
+                    break
         writer.close()
         txt = open(self.num_txt,"w")
         txt.write(str(self.number))
@@ -273,7 +303,7 @@ class DataGenerator():
             repeat.append(heatmap)
         heatmap = tf.stack(repeat, axis=0)
         img = tf.cast(img, tf.float32)
-        img = tf.divide(img, 255)
+        # img = tf.divide(img, 255)
 
         if batch_size:
             if isvalid:

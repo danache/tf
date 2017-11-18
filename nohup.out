@@ -1,0 +1,51 @@
+E1117 10:19:17.304050 MainThread program.py:255] TensorBoard attempted to bind to port 5300, but it was already in use
+TensorBoard attempted to bind to port 5300, but it was already in use
+TensorBoard 0.4.0rc2 at http://bnrc2:5300 (Press CTRL+C to quit)
+W1117 10:23:43.887159 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 10:24:34.395825 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+W1117 10:27:15.145423 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 10:27:50.503726 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+W1117 10:44:23.009383 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 10:44:53.278835 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+TensorBoard 0.4.0rc2 at http://bnrc2:5300 (Press CTRL+C to quit)
+E1117 10:52:14.646742 Reloader directory_watcher.py:188] Unable to get size of /home/bnrc2/mu/tf/log/train.log/events.out.tfevents.1510886945.bnrc2: /home/bnrc2/mu/tf/log/train.log/events.out.tfevents.1510886945.bnrc2; 没有那个文件或目录
+W1117 10:52:14.743130 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 10:52:50.100817 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+W1117 11:03:33.268557 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 11:04:08.637622 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+W1117 11:13:26.394478 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 11:14:01.767335 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+W1117 11:17:27.796510 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 11:18:03.167499 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+W1117 11:20:33.937949 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 11:21:04.286132 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+TensorBoard 0.4.0rc2 at http://bnrc2:5400 (Press CTRL+C to quit)
+TensorBoard 0.4.0rc2 at http://bnrc2:5300 (Press CTRL+C to quit)
+W1117 17:35:14.800611 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 17:35:15.022524 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+W1117 17:35:15.243175 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 17:35:15.470844 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+W1117 17:35:15.690689 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 17:35:15.915442 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+W1117 17:35:16.015015 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 17:35:16.241836 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+E1117 19:25:14.244116 MainThread program.py:255] TensorBoard attempted to bind to port 5300, but it was already in use
+TensorBoard attempted to bind to port 5300, but it was already in use
+TensorBoard 0.4.0rc2 at http://bnrc2:5400 (Press CTRL+C to quit)
+TensorBoard 0.4.0rc2 at http://bnrc2:5300 (Press CTRL+C to quit)
+TensorBoard 0.4.0rc2 at http://bnrc2:5400 (Press CTRL+C to quit)
+TensorBoard 0.4.0rc2 at http://bnrc2:5400 (Press CTRL+C to quit)
+TensorBoard 0.4.0rc2 at http://bnrc2:5300 (Press CTRL+C to quit)
+E1117 19:42:38.953913 Reloader directory_watcher.py:188] Unable to get size of /home/bnrc2/mu/tf/minilog/train.log/events.out.tfevents.1510918374.bnrc2: /home/bnrc2/mu/tf/minilog/train.log/events.out.tfevents.1510918374.bnrc2; 没有那个文件或目录
+W1117 19:42:38.988577 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 19:42:39.656733 Reloader plugin_event_multiplexer.py:203] Deleting accumulator '.'
+W1117 19:42:54.080657 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+TensorBoard 0.4.0rc2 at http://bnrc2:5300 (Press CTRL+C to quit)
+TensorBoard 0.4.0rc2 at http://bnrc2:5400 (Press CTRL+C to quit)
+W1117 20:26:07.013962 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 20:26:22.116914 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.
+W1117 22:33:41.219772 Reloader plugin_event_multiplexer.py:203] Deleting accumulator '.'
+W1117 22:33:41.280776 Reloader plugin_event_multiplexer.py:203] Deleting accumulator '.'
+W1117 22:35:01.784623 Reloader plugin_event_multiplexer.py:203] Deleting accumulator '.'
+W1117 22:46:39.621812 Reloader tf_logging.py:86] Found more than one graph event per run, or there was a metagraph containing a graph_def, as well as one or more graph events.  Overwriting the graph with the newest event.
+W1117 22:46:54.736177 Reloader tf_logging.py:86] Found more than one metagraph event per run. Overwriting the metagraph with the newest event.

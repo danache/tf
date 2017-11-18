@@ -51,19 +51,19 @@ tf.app.flags.DEFINE_string('resume',
 
 if __name__ == '__main__':
     print('--Parsing Config File')
-    params = process_config('./config/config.cfg')
-    network_params = process_network("./config/hourglass.cfg")
+    params = process_config('./config/config_mini.cfg')
+    network_params = process_network("./config/hourglass_mini.cfg")
     #network_params = process_network("./config/hgattention.cfg")
 
     show_step = params["show_step"]
-    train_data = DataGenerator(imgdir=params['train_img_path'], label_dir=params['label_dir'],
+    train_data = DataGenerator(imgdir=params['train_img_path'], nstack= network_params['nstack'],label_dir=params['label_dir'],
                                out_record=params['train_record'],num_txt=params['train_num_txt'],
-                               batch_size=params['batch_size'], name="train", is_aug=False,isvalid=False,scale=
-                               params['scale'])
+                               batch_size=params['batch_size'], name="train_mini", is_aug=False,isvalid=False,scale=
+                               params['scale'], refine_num = 10000)
     valid_data = DataGenerator(imgdir=params['valid_img_path'], label_dir=params['valid_label'],
                                out_record=params['valid_record'],num_txt=params['valid_num_txt'],
-                               batch_size=params['batch_size'], name="valid", is_aug=False,isvalid=True,scale=
-                               params['scale'])
+                               batch_size=params['batch_size'], name="valid_mini", is_aug=False,isvalid=True,scale=
+                               params['scale'],refine_num=3000)
 
     img, hm = train_data.getData()
 
