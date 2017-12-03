@@ -7,7 +7,7 @@ from four_stack.Hourglass import HourglassModel
 from train_class import train_class
 from hg_models.hgattention import HGattention
 import os
-#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 def process_config(conf_file):
     params = {}
     config = configparser.ConfigParser()
@@ -51,7 +51,7 @@ tf.app.flags.DEFINE_string('resume',
 
 if __name__ == '__main__':
     print('--Parsing Config File')
-    params = process_config('./config/config_mini.cfg')
+    params = process_config('./config/config.cfg')
     network_params = process_network("./config/hourglass_mini.cfg")
     #network_params = process_network("./config/hgattention.cfg")
 
@@ -59,7 +59,7 @@ if __name__ == '__main__':
     train_data = DataGenerator(imgdir=params['train_img_path'], nstack= network_params['nstack'],label_dir=params['label_dir'],
                                out_record=params['train_record'],num_txt=params['train_num_txt'],
                                batch_size=params['batch_size'], name="train_mini", is_aug=False,isvalid=False,scale=
-                               params['scale'], refine_num = 10000)
+                               params['scale'])#, refine_num = 10000)
     valid_data = DataGenerator(imgdir=params['valid_img_path'], label_dir=params['valid_label'],
                                out_record=params['valid_record'],num_txt=params['valid_num_txt'],
                                batch_size=params['batch_size'], name="valid_mini", is_aug=False,isvalid=True,scale=

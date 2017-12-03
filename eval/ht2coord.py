@@ -37,9 +37,9 @@ def getjointcoord(heatmap, image_size, image_name,predictions,thresh=0.3):
         img = cv2.imread(img_path)
 
 
-        for i in range(heatmap.shape[-1]):
-            cv2.circle(img, (int(res[i][0]), int(res[i][1])), 10, (0, 255, 155), -1)
-        cv2.imwrite("./img/%s.jpg" % name, img)
+        # for i in range(heatmap.shape[-1]):
+        #     cv2.circle(img, (int(res[i][0]), int(res[i][1])), 10, (0, 255, 155), -1)
+        # cv2.imwrite("./img/%s.jpg" % name, img)
         if name in predictions['image_ids']:
             num = len(predictions['annos'][name]['keypoint_annos'].keys()) + 1
 

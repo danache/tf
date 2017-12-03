@@ -15,7 +15,7 @@ def MSE( output, target, nstack = 4, partnum=14,is_mean=False):
                     for j in range(partnum):
                         tmp_ht = output[:,i,:,:,j]
                         tmp_gt = target[:,i,:,:,j]
-                        tmp_loss = tf.reduce_mean(tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(tmp_ht, tmp_gt )),
+                        tmp_loss = tf.reduce_mean(tf.reduce_sum(tf.square(tf.subtract(tmp_ht, tmp_gt ),
                                                        [1, 2])))
                         allloss += tmp_loss
                         #allloss,tmp_loss

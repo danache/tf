@@ -63,7 +63,7 @@ def draw_pic(heatmap, image_size, image_name,img_dir="",ori =None,thresh=0.2, pd
                 cv2.circle(img, (int(res[i][0]), int(res[i][1])), 10, (0, 255, 155), -1)
 
         # cv2.imwrite("./img/%s.jpg" % name, img)
-        cv2.imwrite("./img/Gauss_ori_%s.jpg" % name,ori_img )
+        #cv2.imwrite("./img/Gauss_ori_%s.jpg" % name,ori_img )
         #
 
 
@@ -78,17 +78,17 @@ def draw_pic(heatmap, image_size, image_name,img_dir="",ori =None,thresh=0.2, pd
 
         anno = row["human_annotations"].tolist()[0]
 
-        for key in anno.keys():
-
-            ankle = keypoint[key].copy()
-            print("gt, resize, *4")
-            for i in range(14):
-                if ankle[i * 3 + 2] == 1:
-                    x = ankle[i * 3 ]
-                    y =  ankle[i * 3 + 1]
-                    cv2.circle(ori_anno, (int(x), int(y)), 5, (0, 255, 155), -1)
-            ori_anno = cv2.resize(ori_anno,(256,256) )
-            cv2.imwrite("./img/256%s.jpg" % name, ori_anno)
+        # for key in anno.keys():
+        #
+        #     ankle = keypoint[key].copy()
+        #     print("gt, resize, *4")
+        #     for i in range(14):
+        #         if ankle[i * 3 + 2] == 1:
+        #             x = ankle[i * 3 ]
+        #             y =  ankle[i * 3 + 1]
+        #             cv2.circle(ori_anno, (int(x), int(y)), 5, (0, 255, 155), -1)
+        #     ori_anno = cv2.resize(ori_anno,(256,256) )
+        #     cv2.imwrite("./img/256%s.jpg" % name, ori_anno)
 
 
 

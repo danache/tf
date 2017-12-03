@@ -9,7 +9,7 @@ from four_stack.Hourglass import HourglassModel
 from train_class import train_class
 from predict_class import test_class
 import os
-#os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 def process_config(conf_file):
     params = {}
     config = configparser.ConfigParser()
@@ -53,16 +53,16 @@ tf.app.flags.DEFINE_string('resume',
 
 if __name__ == '__main__':
     print('--Parsing Config File')
-    params = process_config('./config/config.cfg')
-    network_params = process_network("./config/hourglass.cfg")
+    params = process_config('./config/test_config.cfg')
+    network_params = process_network("./config/hourglass_mini.cfg")
     #network_params = process_network("./config/hgattention.cfg")
 
     show_step = params["show_step"]
-    test_data = DataGenerator(imgdir=params['train_img_path'], label_dir=params['label_dir'],
-                               out_record="/media/bnrc2/_backup/ai/mu/test.tfrecords",
-                               num_txt="/media/bnrc2/_backup/ai/mu/test_num.txt",
-                               batch_size=params['batch_size'], name="train", is_aug=False,isvalid=True,scale=
-                               params['scale'])
+    # test_data = DataGenerator(imgdir=params['train_img_path'], label_dir=params['label_dir'],
+    #                            out_record="/media/bnrc2/_backup/ai/mu/test.tfrecords",
+    #                            num_txt="/media/bnrc2/_backup/ai/mu/test_num.txt",
+    #                            batch_size=params['batch_size'], name="train", is_aug=False,isvalid=True,scale=
+    #                            params['scale'])
 
 
     model = HourglassModel(nFeat=network_params['nfeats'], nStack=network_params['nstack'],
@@ -70,13 +70,13 @@ if __name__ == '__main__':
 
 
     test = test_class(model=model, nstack=network_params['nstack'],
-                         test_record=test_data,
+                         test_json="/home/bnrc2/mu/deepcut-pose/python/gongon.csv",
                               resume=params['resume'],#/media/bnrc2/_backup/golf/model/tiny_hourglass_21
                               gpu=params['gpus'],partnum=network_params['partnum'],
                              )
 
-
     test.generateModel()
-    test.training_init()
+    test.test_init(img_path="/home/bnrc2/mu/deepcut-pose/python/gongon_resize",
+                   save_dir="/home/bnrc2/mu/deepcut-pose/python/gonghour")
 
 

@@ -5,16 +5,20 @@ del sys.path[0]
 import tensorflow as tf
 import numpy as np
 import tensorlayer as tl
-
-from tools.draw_point_from_test import draw_pic
+import os
+import cv2
+#from tools.draw_point_from_test import draw_pic
+import pandas as pd
 class test_class():
     def __init__(self, model, nstack=4, test_record="",resume="",gpu=[0],
-                 partnum=14,test_img_dir = ""
+                 partnum=14,test_img_dir = "",test_json=""
                  ):
 
         self.resume = resume
 
         self.test_record = test_record
+        self.test_json = test_json
+
         self.gpu = gpu
         self.cpu = '/cpu:0'
         self.model = model
@@ -22,16 +26,22 @@ class test_class():
         self.joints = ["rShoulder", "rElbow", "rWrist", "lShoulder", "lElbow", "lWrist", "rhip","rknee","rankle",
                        "lhip","lknee","lankle","head","neck"]
 
+        self.colors = [
+            [ 0, 0,255], [0, 255, 0], [255,0,0], [0, 245, 255], [255, 131, 250], [255, 255, 0],
+            [0, 0, 255], [0, 255, 0], [255, 0, 0], [0, 245, 255], [255, 131, 250], [255, 255, 0],
+                  [0, 0, 0], [255, 255, 255], [255, 0, 0], [0, 255, 0], [0, 0, 255]]
+
         self.mae = tf.Variable(0, trainable=False, dtype=tf.float32,)
         self.test_img_dir = test_img_dir
 
 
     def generateModel(self):
 
-        test_data = self.test_record
-        self.train_num = test_data.getN()
-        self.test_img, test_ht, self.test_size, self.test_name = test_data.getData()
-        self.test_out = self.model(self.test_img,reuse=False)
+        # test_data = self.test_record
+        # self.train_num = test_data.getN()
+        # self.test_img, test_ht, self.test_size, self.test_name = test_data.getData()
+        self.test_img = tf.placeholder(tf.float32,shape=[None,256,256,3])
+        self.test_out = self.model(self.test_img,reuse=False).outputs
 
         #self.train_output = self.model(train_img)
 
@@ -47,35 +57,81 @@ class test_class():
         tl.layers.initialize_global_variables(self.Session)
         print("init done")
 
-    def training_init(self,):
+    def test_init(self,img_path="",save_dir=""):
         with tf.name_scope('Session'):
             with tf.device("/gpu:1"):
                 self._init_weight()
                 self.saver = tf.train.Saver()
+                self.init = tf.group(tf.global_variables_initializer(),
+                                tf.local_variables_initializer())
+
+                self.coord = tf.train.Coordinator()
+                self.threads = tf.train.start_queue_runners(coord=self.coord, sess=self.Session)
+                self.Session.run(self.init)
                 if self.resume:
                     print("resume from"+self.resume)
                     self.saver.restore(self.Session, self.resume)
-                self.test()
+                self.test(img_path,save_dir)
 
-    def test(self,  ):
+    def test(self,  img_path,save_dir):
+
+        json = pd.read_csv(self.test_json)
+        for index, row in json.iterrows():
+            name = os.path.splitext(row['name'])[0]
+
+            img_dir = os.path.join(img_path,name+".jpg" )
+            if not os.path.exists(img_dir):
+                continue
+            #print(img_dir)
+            x1, y1, x2, y2 = int(row['x1']), int(row['y1']), int(row['x2']), int(row['y2'])
+            img = cv2.imread(img_dir)
+            human = img[y1:y2, x1:x2]
+            img_padd = np.zeros([256,256,3])
+            board_w = x2 - x1
+            board_h = y2 - y1
+            resize = 256
+
+            if board_h < board_w:
+                newsize = (resize, board_h * resize // board_w)
+            else:
+                newsize = (board_w * resize // board_h, resize)
+            img_reshape = cv2.resize(human, newsize)
+            if (img_reshape.shape[0] < resize):  # 高度不够，需要补0。则要对item[6:]中的第二个值进行修改
+                up = 0
+                down = img_reshape.shape[0]
+                img_padd[up:down, :, :] = img_reshape
+            elif (img_reshape.shape[1] < resize):
+                left = 0
+                right = img_reshape.shape[1]
+                img_padd[:, left:right, :] = img_reshape
+            img_padd_tf= np.expand_dims(img_padd,0)
+            hg = self.Session.run(self.test_out,feed_dict={self.test_img:img_padd_tf})
+            htmap = hg[0,3]
+            res = np.ones(shape=(14, 3)) * -1
+            reshape_data = np.zeros([256,256,14])
+            for j in range(14):
+                tmp = htmap[ :, :, j]
+                tmp = np.expand_dims(tmp, axis=-1)
+                tmp = cv2.resize(tmp, (256, 256))
+                reshape_data[ :, :, j] = np.squeeze(tmp)
+            for joint in range(14):
+                idx = np.unravel_index(reshape_data[ :, :, joint].argmax(), (256, 256))
+                res[joint][0] = idx[1]
+                res[joint][1] = idx[0]
+                visable = 1
+                if reshape_data[ idx[0], idx[1], joint] < 0.1:
+                    visable = 0
+                res[joint][2] = visable
+            # ratio = board_h * 1./ newsize[0]
+            # res[:, 0] = res[:, 0] * ratio + x1
+            # res[:, 1] = res[:, 1] * ratio + y1
+            for i in range(14):
+                cv2.circle(img_padd, (int(res[i][0]), int(res[i][1])), 5, self.colors[i], -1)
+            cv2.imwrite(os.path.join(save_dir, name+".jpg"), img_padd)
 
 
-        init = tf.group(tf.global_variables_initializer(),
-                        tf.local_variables_initializer())
 
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord, sess=self.Session)
-        self.Session.run(init)
-
-        test_num = 2
-        img_idr = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoint_train_images_20170902/"
-        for n_batch in range(test_num):#n_step_epoch
-            test_img,test_out, val_size, val_name,  = self.Session.run(
-                [self.test_img,self.test_out.outputs, self.test_size, self.test_name],)
-            print(np.unique(test_img))
-            draw_pic(heatmap=test_out,image_size=val_size,image_name=val_name,img_dir = img_idr,ori = test_img)
-
-        coord.request_stop()
-        coord.join(threads)
+        self.coord.request_stop()
+        self.coord.join(self.threads)
         self.Session.close()
         print('Training Done')

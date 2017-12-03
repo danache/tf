@@ -154,10 +154,6 @@ class DataGenerator():
                         if j % 3 == 0:
                             ankle[j] = (tmp.shape[1] * ankle[j] * 1.) * 1. / resize
 
-
-
-
-
                 new_img = new_img.astype(np.uint8)
                 img_size = [ w,h,x1, y1, board_w,board_h,newsize[0], newsize[1]]
                 feature = {
@@ -272,30 +268,30 @@ class DataGenerator():
         heatmap = self.generateHeatMap(heatmap_size, heatmap_size, label, label_size / 3, heatmap_size * 1.)
         repeat = []
 
-
-        ###rotate
-        if self.rotate:
-            print("rotate")
-            rotate_angle = random.uniform(-rotate*1./360, rotate*1./360) * np.pi
-            #ex_angle = np.pi / 8
-            #print(rotate_angle)
-            img = tf.contrib.image.rotate(img, angles=rotate_angle)
-            for i in range(len(heatmap)):
-                heatmap[i] = tf.contrib.image.rotate(heatmap[i], angles=rotate_angle)
-        ###flip
-        if self.flipping:
-            print("flipping")
-            if (random.random() > 0.5):
-                img = tf.image.flip_left_right(img)
-                for i in range(len(heatmap)):
-                    heatmap[i] = tf.image.flip_left_right(heatmap[i])
-        if self.color_jitting:
-            print("color jitting")
-            ###color_jitting
-            img = tf.image.random_hue(img, max_delta=0.05)
-            img = tf.image.random_contrast(img, lower=0.3, upper=1.0)
-            img = tf.image.random_brightness(img, max_delta=0.2)
-            img = tf.image.random_saturation(img, lower=0.0, upper=2.0)
+        #
+        # ###rotate
+        # if self.rotate:
+        #     print("rotate")
+        #     rotate_angle = random.uniform(-rotate*1./360, rotate*1./360) * np.pi
+        #     #ex_angle = np.pi / 8
+        #     #print(rotate_angle)
+        #     img = tf.contrib.image.rotate(img, angles=rotate_angle)
+        #     for i in range(len(heatmap)):
+        #         heatmap[i] = tf.contrib.image.rotate(heatmap[i], angles=rotate_angle)
+        # ###flip
+        # if self.flipping:
+        #     print("flipping")
+        #     if (random.random() > 0.5):
+        #         img = tf.image.flip_left_right(img)
+        #         for i in range(len(heatmap)):
+        #             heatmap[i] = tf.image.flip_left_right(heatmap[i])
+        # if self.color_jitting:
+        #     print("color jitting")
+        #     ###color_jitting
+        #     img = tf.image.random_hue(img, max_delta=0.05)
+        #     img = tf.image.random_contrast(img, lower=0.3, upper=1.0)
+        #     img = tf.image.random_brightness(img, max_delta=0.2)
+        #     img = tf.image.random_saturation(img, lower=0.0, upper=2.0)
         for i in range(len(heatmap)):
             heatmap[i] = tf.squeeze(heatmap[i])
         heatmap = tf.stack(heatmap,axis=-1)

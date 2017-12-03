@@ -1,16 +1,17 @@
-import time
-import tensorflow as tf
-from eval import MSE
-import numpy as np
-import sys
 import os
-import tensorlayer as tl
+import sys
+import time
 
+import numpy as np
+import tensorflow as tf
+import tensorlayer as tl
+from tools.keypoint_eval import getScore
+from tools.keypoint_eval import load_annotations
+
+from eval import MSE
 from eval.eval import accuracy_computation
 from eval.ht2coord import getjointcoord
 from tools.lr import get_lr
-from tools.keypoint_eval import getScore
-from tools.keypoint_eval import load_annotations
 class train_class():
     def __init__(self, model, nstack=4, batch_size=32,learn_rate=2.5e-4, decay=0.96, decay_step=2000,
                  logdir_train="./log/train.log", logdir_valid="./log/test.log",
@@ -39,9 +40,7 @@ class train_class():
         self.val_label = val_label
         self.mae = tf.Variable(0, trainable=False, dtype=tf.float32,)
         self.human_decay = human_decay
-        self.loss = []
-        self.stack_loss =[]
-        self.part_loss = []
+
         self.val_batch_num=val_batch_num
 
     def average_gradients(self,tower_grads):
@@ -86,7 +85,7 @@ class train_class():
         generate_time = time.time()
         train_data = self.train_record
         self.train_num = train_data.getN()
-        train_img, train_heatmap = train_data.getData()
+        train_img, self.train_heatmap = train_data.getData()
 
         #self.train_output = self.model(train_img)
 
@@ -112,7 +111,7 @@ class train_class():
 
         self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr)
         flag = False
-
+        self.loss = []
 
         with tf.variable_scope(tf.get_variable_scope()) as vscope:
             for i in self.gpu:
@@ -120,18 +119,40 @@ class train_class():
                     with tf.name_scope('gpu_%d' % ( i)) as scope:
 
                         self.train_output = self.model(train_img,reuse=flag)
+
                         flag = True
                         with tf.name_scope('loss'):
                             with tf.device(self.cpu):
-                                allloss, stack_loss, part_loss = MSE.MSE(output=self.train_output.outputs, target=train_heatmap,
-                                                    nstack=self.nstack, partnum=self.partnum,is_mean=True)
+                                allloss = tf.losses.mean_squared_error(labels=self.train_heatmap,predictions=self.train_output.outputs)
 
-                                self.loss.append(allloss[0])
-                                self.stack_loss.append(stack_loss)
-                                self.part_loss.append(part_loss)
+                                self.loss.append(allloss)
+
                                 with tf.name_scope('training'):
                                     # print(type(self.loss))
                                     tf.summary.scalar('loss_%d' % (i), self.loss[i], collections=['train'])
+                                with tf.name_scope('heatmap'):
+                                    c = tf.constant(np.arange(0, self.partnum))
+                                    shuff = tf.random_shuffle(c)
+                                    n = shuff[0]
+                                    n = tf.cast(n,tf.int32 )
+                                    im = train_img[n, :, :, :]
+                                    im = tf.expand_dims(im, 0)
+
+                                    tf.summary.image(name=('origin_img_%d'%(i)), tensor=im, collections=['train'])
+
+                                    for joint in range(self.partnum):
+                                        hm = self.train_output.outputs[n, self.nstack - 1, :, :, joint]
+                                        hm = tf.expand_dims(hm, -1)
+                                        hm = tf.expand_dims(hm, 0)
+                                        hm = hm * 255
+                                        gt = self.train_heatmap[n, self.nstack - 1, :, :, joint]
+
+                                        gt = tf.expand_dims(gt, -1)
+                                        gt = tf.expand_dims(gt, 0)
+                                        gt = gt * 255
+                                        tf.summary.image('ground_truth_%s_%d' % (self.joints[joint],i), tensor=gt,
+                                                         collections=['train'])
+                                        tf.summary.image('heatmp_%s_%d' % (self.joints[joint],i), hm, collections=['train'])
 
                         tf.get_variable_scope().reuse_variables()
 
@@ -149,12 +170,34 @@ class train_class():
             generate_valid_done_time = time.time()
             print('train data generate in ' + str(int(generate_valid_done_time - generate_train_done_time )) + ' sec.')
             print("valid num is %d" % (self.valid_num))
-            with tf.name_scope('acc'):
-                self.acc = accuracy_computation(self.valid_output.outputs, valid_ht, batch_size=self.batch_size,
-                                                nstack=self.nstack)
-            with tf.name_scope('test'):
-                for i in range(self.partnum):
-                    tf.summary.scalar(self.joints[i], self.acc[i], collections=['test'])
+
+            with tf.name_scope('val_heatmap'):
+
+                val_im = valid_img[n, :, :, :]
+                val_im = tf.expand_dims(val_im, 0)
+
+                tf.summary.image(name=('origin_valid_img' ), tensor=val_im, collections=['test'])
+
+                for joint in range(self.partnum):
+                    val_hm = self.valid_output.outputs[n, self.nstack - 1, :, :, joint]
+                    val_hm = tf.expand_dims(val_hm, -1)
+                    val_hm = tf.expand_dims(val_hm, 0)
+                    val_hm = val_hm * 255
+                    val_gt = valid_ht[n, self.nstack - 1, :, :, joint]
+
+                    val_gt = tf.expand_dims(val_gt, -1)
+                    val_gt = tf.expand_dims(val_gt, 0)
+                    val_gt = val_gt * 255
+                    tf.summary.image('valid_ground_truth_%s' % (self.joints[joint]), tensor=val_gt,
+                                     collections=['test'])
+                    tf.summary.image('valid_heatmp_%s' % (self.joints[joint]), val_hm, collections=['test'])
+
+            # with tf.name_scope('acc'):
+            #     self.acc = accuracy_computation(self.valid_output.outputs, valid_ht, batch_size=self.batch_size,
+            #                                     nstack=self.nstack)
+            # with tf.name_scope('test'):
+            #     for i in range(self.partnum):
+            #         tf.summary.scalar(self.joints[i], self.acc[i], collections=['test'])
 
         with tf.device(self.cpu):
 
@@ -191,6 +234,13 @@ class train_class():
             with tf.device(self.gpu[0]):
                 self._init_weight()
                 self.saver = tf.train.Saver()
+                init = tf.group(tf.global_variables_initializer(),
+                                tf.local_variables_initializer())
+
+                self.coord = tf.train.Coordinator()
+                self.threads = tf.train.start_queue_runners(coord=self.coord, sess=self.Session)
+                self.Session.run(init)
+
                 if self.resume:
                     print("resume from"+self.resume)
                     self.saver.restore(self.Session, self.resume)
@@ -199,7 +249,7 @@ class train_class():
     def train(self, nEpochs=10, valStep = 3000,showStep=10 ):
         #best_val = open("./best_val.txt", "w")
         best_model_dir = ""
-        best_val = 99999
+        best_val = -99999
         #####参数定义
         self.resume = {}
         self.resume['accur'] = []
@@ -215,12 +265,7 @@ class train_class():
         self.train_writer = tf.summary.FileWriter(self.logdir_train, self.Session.graph)
         self.valid_writer = tf.summary.FileWriter(self.logdir_valid)
 
-        init = tf.group(tf.global_variables_initializer(),
-                        tf.local_variables_initializer())
 
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(coord=coord, sess=self.Session)
-        self.Session.run(init)
         last_lr = self.learn_r
         hm_decay = 1
         if self.validIter < self.val_batch_num:
@@ -247,8 +292,8 @@ class train_class():
                 sys.stdout.flush()
 
                 if n_batch % showStep == 0:
-                    _,lo ,sta_lo, part_lo,summary,last_lr= self.Session.run\
-                        ([self.apply_gradient_op,self.loss,self.stack_loss,self.part_loss,self.train_merged,self.lr],
+                    _,lo ,summary,last_lr= self.Session.run\
+                        ([self.apply_gradient_op,self.loss,self.train_merged,self.lr],
                          feed_dict={self.last_learning_rate : last_lr, self.h_decay:hm_decay})
 
                     self.train_writer.add_summary(summary, epoch * n_step_epoch + n_batch)
@@ -263,7 +308,7 @@ class train_class():
                 if (n_batch+1) % valStep == 0:
                     if self.valid_record:
                         val_begin = time.time()
-                        accuracy_array = np.zeros([1, 14])
+
                         predictions = dict()
                         predictions['image_ids'] = []
                         predictions['annos'] = dict()
@@ -274,18 +319,17 @@ class train_class():
                             val_num = np.int(20 * val_percent / 100)
                             val_tToEpoch = int((time.time() - val_begin) * (100 - val_percent) / (val_percent))
 
-                            accuracy_pred, val_out, val_size, val_name,last_lr = self.Session.run(
-                                [self.acc, self.valid_output.outputs, self.valid_size, self.valid_name,self.lr],
+                            val_out, val_size, val_name,last_lr = self.Session.run(
+                                [ self.valid_output.outputs, self.valid_size, self.valid_name,self.lr],
                                 feed_dict={self.last_learning_rate: last_lr, self.h_decay: hm_decay})
 
                             # print(np.array(accuracy_pred).shape)
-                            accuracy_array += np.array(accuracy_pred, dtype=np.float32) / val_batch_num
+
                             predictions = getjointcoord(val_out, val_size, val_name, predictions)
                             sys.stdout.write(
-                                '\r valid {0}>'.format("=" * val_num) + "{0}>".format(" " * (20 - val_num)) + '||' + str(
-                                    percent)[
-                                                                                                              :4] +
-                                '%' + ' -cost: ' + str(accuracy_array)[:6] +
+                                '\r valid {0}>'.format("=" * val_num) + "{0}>".format(" " * (20 - val_num)) + '||' + str(percent)[
+                                                                                                  :4][:4] +
+                                '%' + ' -cost: ' +
                                 ' -timeToEnd: ' + str(val_tToEpoch) + ' sec.')
                             sys.stdout.flush()
                         print("val done in" + str(time.time() - val_begin_time))
@@ -294,34 +338,36 @@ class train_class():
                         print("epoch %d, batch %d ,val score = %d" % (epoch, n_batch, score))
                         tmp = self.mae.assign(score)
                         _ = self.Session.run(tmp)
-                        now_acc = (np.sum(accuracy_array) / len(accuracy_array))
-                        if now_acc < best_val:
-
-                            best_val = now_acc
+                        if score > best_val:
+                            best_val = score
                             best_model_dir = os.path.join(self.save_dir, self.name + '_' + str(epoch) +
-                                                             "_" + str(n_batch) +"_"+(str(now_acc)[:8]))
+                                                          "_" + str(n_batch) + "_" + (str(score)[:8]))
                             print("get lower loss, save at " + best_model_dir)
                             with tf.name_scope('save'):
                                 self.saver.save(self.Session, best_model_dir)
                             hm_decay = 1.
-                        # else:
-                        #     print("now val loss is not best, restore model from" + best_model_dir)
-                        #     self.saver.restore(self.Session, best_model_dir)
-                        #     hm_decay = self.human_decay
 
+                        else:
+                            print("now val loss is not best, restore model from" + best_model_dir)
+                            self.saver.restore(self.Session, best_model_dir)
+                            hm_decay = self.human_decay
 
-
-
-                        print('--Avg. Accuracy loss =', str(now_acc)[:6], )
-                        self.resume['accur'].append(accuracy_array)
-                        self.resume['err'].append(np.sum(accuracy_array) / len(accuracy_array))
                         valid_summary = self.Session.run([self.valid_merge])
 
                         self.valid_writer.add_summary(valid_summary[0], epoch * n_step_epoch + n_batch)
                         self.valid_writer.flush()
 
-
+            if epoch % 5 == 0:
+                model_dir = os.path.join(self.save_dir, self.name + '_' + str(epoch) +
+                                              "_" + "base")
+                print("epoch %d , save at "%epoch + model_dir)
+                with tf.name_scope('save'):
+                    self.saver.save(self.Session, model_dir)
             epochfinishTime = time.time()
+            # if epoch % 5 == 0:
+            #     hm_decay = self.human_decay
+            # else:
+            #     hm_decay = 1.
             print('Epoch ' + str(epoch) + '/' + str(nEpochs) + ' done in ' + str(
                 int(epochfinishTime - epochstartTime)) + ' sec.' + ' -avg_time/batch: ' + str(
                 ((epochfinishTime - epochstartTime) / n_step_epoch))[:4] + ' sec.')
@@ -331,7 +377,7 @@ class train_class():
             #####valid
 
 
-        coord.request_stop()
-        coord.join(threads)
+        self.coord.request_stop()
+        self.coord.join(self.threads)
         self.Session.close()
         print('Training Done')

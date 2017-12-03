@@ -58,48 +58,82 @@ class HourglassModel():
             with tf.name_scope('train'):
                 tf.summary.histogram('data', data.outputs, collections=['train'])
 
-            conv1 = conv_2d(data, 64, filter_size=(6, 6), strides=(2, 2), padding="SAME", name="conv1")
-
+            conv1 = conv_2d(data, 64, filter_size=(7, 7), strides=(2, 2), padding="SAME", name="conv1")
+            #conv1 (128,128,64)
             bn1 = tl.layers.BatchNormLayer(conv1, name="bn1", act=tf.nn.relu)
             # with tf.name_scope('train'):
             #     tf.summary.histogram("conv1_bn/weight", conv1.all_params[0], collections=['train'])
             #     tf.summary.histogram('conv1_bn', bn1.outputs, collections=['train'])
             r1 = Residual(bn1, 64, 128, name="Residual1",reuse=reuse)
+            #r1 (128,128,128)
             # with tf.name_scope('train'):
             #     tf.summary.histogram('residual1', r1.outputs, collections=['train'])
 
             pool = tl.layers.MaxPool2d(r1, (2, 2), strides=(2, 2), name="pool1")
 
             r2 = Residual(pool, 128, 128, name="Residual2",reuse=reuse)
-            with tf.name_scope('train'):
-                tf.summary.histogram('residual2', r2.outputs, collections=['train'])
+            # r2 (64,64,128)
+
             r3 = Residual(r2, 128, self.nFeats, name="Residual3",reuse=reuse)
-            with tf.name_scope('train'):
-                tf.summary.histogram('residual3', r3.outputs, collections=['train'])
+            # 64,64,256
                     # return r3
             # Storage Table
 
         out = []
 
-        inter = [r3]
+        hg = [None] * self.nStack
+        residual=[None] * self.nStack
+        ll = [None] * self.nStack
+        fc_out = [None] * self.nStack
+        c_1 = [None] * self.nStack
+        c_2 = [None] * self.nStack
+        sum_ = [None] * self.nStack
+
+
         with tf.variable_scope("stack", reuse=reuse):
-            for i in range(self.nStack):
+            with tf.name_scope('stage_0'):
+                hg[0] = self.hourglass(r3, n=4, f=self.nFeats, name="stage_0_hg", reuse=reuse)
+
+                residual[0] = Residual(hg[0], self.nFeats, self.nFeats, name="stage_0_Residual",reuse=reuse)
+                ll[0] = self.lin( residual[0], self.nFeats, name="stage_0_lin1" , reuse=reuse)
+                fc_out[0] = conv_2d(ll[0], self.partnum, filter_size=(1, 1), strides=(1, 1),
+                                 name="stage_0_out" )
+                out.append(fc_out[0])
+
+                c_1[0] = conv_2d(ll[0], self.nFeats, filter_size=(1, 1), strides=(1, 1),
+                              name="stage_0_conv1")
+
+                c_2[0] = conv_2d(c_1[0], self.nFeats, filter_size=(1, 1), strides=(1, 1),
+                                  name="stage_0_conv2")
+                sum_[0] = tl.layers.ElementwiseLayer(layer=[r3, c_1[0], c_2[0]],
+                                                        combine_fn=tf.add, name="stage_0_add_n" )
+
+            for i in range(1,self.nStack-1):
                 with tf.name_scope('stage_%d' % (i)):
-                    hg = self.hourglass(inter[i], n=4, f=self.nFeats, name="stage_%d_hg" % (i),reuse=reuse)
+                    hg[i] = self.hourglass(sum_[i-1], n=4, f=self.nFeats, name="stage_%d_hg" % (i),reuse=reuse)
 
-                    tmpr1 = Residual(hg, self.nFeats, self.nFeats, name="stage_%d_Residual1" % (i))
-                    ll = self.lin(tmpr1, self.nFeats, name="stage_%d_lin1" % (i),reuse=reuse)
-                    tmpout = conv_2d(ll, self.partnum, filter_size=(1, 1), strides=(1, 1),
-                                     name="stage_%d_tmpout" % (i))
-                    out.append(tmpout)
-                    if i < self.nStack - 1:
-                        ll_ = conv_2d(ll, self.nFeats, filter_size=(1, 1), strides=(1, 1),
-                                      name="stage_%d_ll_" % (i))
-                        tmpOut_ = conv_2d(tmpout, self.nFeats, filter_size=(1, 1), strides=(1, 1),
-                                          name="stage_%d_tmpOut_" % (i))
-                        inter.append(tl.layers.ElementwiseLayer(layer=[inter[i], ll_, tmpOut_],
-                                                           combine_fn=tf.add, name="stage_%d_add_n" % (i)))
+                    residual[i] = Residual(hg[i], self.nFeats, self.nFeats, name="stage_%d_Residual"% (i), reuse=reuse)
+                    ll[i] = self.lin(residual[i], self.nFeats, name="stage_%d_lin"% (i), reuse=reuse)
+                    fc_out[i] = conv_2d(ll[i], self.partnum, filter_size=(1, 1), strides=(1, 1),
+                                        name="stage_%d_out"% (i))
+                    out.append(fc_out[i])
 
+                    c_1[i] = conv_2d(ll[i], self.nFeats, filter_size=(1, 1), strides=(1, 1),
+                                     name="stage_%d_conv1"% (i))
+
+                    c_2[i] = conv_2d(c_1[i], self.nFeats, filter_size=(1, 1), strides=(1, 1),
+                                     name="stage_%d_conv2"% (i))
+                    sum_[i] = tl.layers.ElementwiseLayer(layer=[sum_[i-1], c_1[i], c_2[i]],
+                                                         combine_fn=tf.add, name="stage_%d_add_n"% (i))
+            with tf.name_scope('stage_%d' % (self.nStack - 1)):
+                hg[self.nStack - 1] = self.hourglass(sum_[self.nStack-2], n=4, f=self.nFeats,
+                                                     name="stage_%d_hg" % (self.nStack-1), reuse=reuse)
+
+                residual[self.nStack - 1] = Residual(hg[self.nStack - 1], self.nFeats, self.nFeats, name="stage_%d_Residual"% (self.nStack-1), reuse=reuse)
+                ll[self.nStack - 1] = self.lin(residual[self.nStack - 1], self.nFeats, name="stage_%d_lin1"% (self.nStack-1), reuse=reuse)
+                fc_out[self.nStack - 1] = conv_2d(ll[self.nStack - 1], self.partnum, filter_size=(1, 1), strides=(1, 1),
+                                    name="stage_%d_out"% (self.nStack-1))
+                out.append(fc_out[self.nStack - 1])
         # end = out[0]
         end = tl.layers.StackLayer(out, axis=1, name='final_output')
         # end = tl.layers.StackLayer([out])

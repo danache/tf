@@ -2,14 +2,10 @@ import sys
 sys.path.append(sys.path[0])
 del sys.path[0]
 import tensorflow as tf
-import numpy as np
 from dataGenerator.datagen import DataGenerator
 from train import process_config
 from train import process_network
 from tools.draw_point_from_test import draw_pic
-from eval.ht2coord import getjointcoord
-from tools.lr import get_lr
-from tools.keypoint_eval import getScore
 from tools.keypoint_eval import load_annotations
 import pandas as pd
 import os

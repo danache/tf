@@ -145,8 +145,6 @@ def keypoint_eval(predictions, annotations, return_dict):
         # if the image in the predictions, then compute oks
         if image_id in prediction_id_set:
 
-            print(annotations['annos'][image_id])
-            print(predictions['annos'][image_id]['keypoint_annos'])
             oks = compute_oks(anno=annotations['annos'][image_id], \
                               predict=predictions['annos'][image_id]['keypoint_annos'], \
                               delta=annotations['delta'])
