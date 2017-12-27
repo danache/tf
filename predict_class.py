@@ -57,7 +57,7 @@ class test_class():
         tl.layers.initialize_global_variables(self.Session)
         print("init done")
 
-    def test_init(self,img_path="",save_dir=""):
+    def test_init(self,img_path="",save_dir="",score=False):
         with tf.name_scope('Session'):
             with tf.device("/gpu:1"):
                 self._init_weight()
@@ -71,6 +71,8 @@ class test_class():
                 if self.resume:
                     print("resume from"+self.resume)
                     self.saver.restore(self.Session, self.resume)
+
+
                 self.test(img_path,save_dir)
 
     def test(self,  img_path,save_dir):
@@ -106,28 +108,18 @@ class test_class():
                 img_padd[:, left:right, :] = img_reshape
             img_padd_tf= np.expand_dims(img_padd,0)
             hg = self.Session.run(self.test_out,feed_dict={self.test_img:img_padd_tf})
-            htmap = hg[0,3]
+            htmap = hg[0, 3]
             res = np.ones(shape=(14, 3)) * -1
-            reshape_data = np.zeros([256,256,14])
-            for j in range(14):
-                tmp = htmap[ :, :, j]
-                tmp = np.expand_dims(tmp, axis=-1)
-                tmp = cv2.resize(tmp, (256, 256))
-                reshape_data[ :, :, j] = np.squeeze(tmp)
+
             for joint in range(14):
-                idx = np.unravel_index(reshape_data[ :, :, joint].argmax(), (256, 256))
-                res[joint][0] = idx[1]
-                res[joint][1] = idx[0]
-                visable = 1
-                if reshape_data[ idx[0], idx[1], joint] < 0.1:
-                    visable = 0
-                res[joint][2] = visable
-            # ratio = board_h * 1./ newsize[0]
-            # res[:, 0] = res[:, 0] * ratio + x1
-            # res[:, 1] = res[:, 1] * ratio + y1
+                idx = np.unravel_index(htmap[:, :, joint].argmax(), (64, 64))
+                tmp_idx = np.asarray(idx) * 4
+                res[joint][0] = tmp_idx[1]
+                res[joint][1] = tmp_idx[0]
+
             for i in range(14):
                 cv2.circle(img_padd, (int(res[i][0]), int(res[i][1])), 5, self.colors[i], -1)
-            cv2.imwrite(os.path.join(save_dir, name+".jpg"), img_padd)
+            cv2.imwrite(os.path.join(save_dir, name + ".jpg"), img_padd)
 
 
 

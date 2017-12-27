@@ -1,0 +1,30 @@
+[DataSetHG]
+train_img_path = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoint_train_images_20170902/"
+label_dir = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoint_train_annotations_20170909.json"
+train_record = "/media/bnrc2/_backup/dataset/aiclg/mini_train_no_aug.tfrecords"
+valid_img_path = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_validation_20170911/keypoint_validation_images_20170911/"
+valid_label = "/home/bnrc2/ai_challenge/ian/pytorch_ai_challenger_HPE/interim_data/keypoint_validation_annotations_20170911.json"
+valid_record = "/media/bnrc2/_backup/dataset/aiclg/mini_ljw_valid_no_aug.tfrecords"
+train_num_txt = "/media/bnrc2/_backup/dataset/aiclg/mini_train_no_aug_num.txt"
+valid_num_txt = "/media/bnrc2/_backup/dataset/aiclg/mini_ljw_valid_no_aug.txt"
+scale=0
+[log]
+train_log_dir = "/media/bnrc2/_backup/log/gan_1217/train.log"
+valid_log_dir = "/media/bnrc2/_backup/log/gan_1217/valid.log"
+
+[Saver]
+model_save_path = "/media/bnrc2/_backup/models/gan_v2"
+model_name = "POSE-GAN"
+show_step = 10
+val_step = 5000
+val_batch_num = 10000
+resume = "/media/bnrc2/_backup/models/gan_v2/hourglass_8_20"
+[Training setting]
+gpus = [0,1]
+batch_size = 8
+mean_pixels=[0,0,0]
+lear_rate=2.5e-4
+decay=0.96
+decay_step=20
+nEpochs: 200
+human_decay = 0.7

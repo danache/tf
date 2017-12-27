@@ -25,6 +25,7 @@ def skipLayer(data,numin, numOut,name="",reuse=False):
             return conv_2d(data,numOut,filter_size=(1,1),strides=(1,1),name="conv")
 
 def Residual(data,numin, numOut,name,reuse=False):
+
     #with mx.name.Prefix("%s_%s_" % (name, suffix)):
     with tf.variable_scope(name, reuse=reuse):
         convb = convBlock(data, numin,numOut,name="%s_convBlock" %(name))

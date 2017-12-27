@@ -53,8 +53,8 @@ tf.app.flags.DEFINE_string('resume',
 
 if __name__ == '__main__':
     print('--Parsing Config File')
-    params = process_config('./config/test_config.cfg')
-    network_params = process_network("./config/hourglass_mini.cfg")
+    params = process_config('./config/config.cfg')
+    network_params = process_network("./config/hourglass.cfg")
     #network_params = process_network("./config/hgattention.cfg")
 
     show_step = params["show_step"]
@@ -76,7 +76,6 @@ if __name__ == '__main__':
                              )
 
     test.generateModel()
-    test.test_init(img_path="/home/bnrc2/mu/deepcut-pose/python/gongon_resize",
-                   save_dir="/home/bnrc2/mu/deepcut-pose/python/gonghour")
-
+    test.test_init(img_path="/home/bnrc2/mu/deepcut-pose/python/ly_resize",
+                   save_dir="/home/bnrc2/mu/deepcut-pose/python/lyhour")
 
