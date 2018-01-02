@@ -7,7 +7,6 @@ from four_stack.Hourglass import HourglassModel
 from train_class import train_class
 
 import os
-
 #os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 def process_config(conf_file):
     params = {}
@@ -68,7 +67,7 @@ if __name__ == '__main__':
 
 
 
-    model = HourglassModel(nFeat=network_params['nfeats'], nStack=network_params['nstack'],
+    model = HourglassModel(nFeats=network_params['nfeats'], nStack=network_params['nstack'],
                            nModules=network_params['nmodules'],outputDim=network_params['partnum'])._graph_hourglass
 
     # model = HGattention(nFeat=network_params['nfeats'], nStack=network_params['nstack'],

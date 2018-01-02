@@ -1,36 +1,74 @@
 import tensorflow as tf
-import tensorlayer as tl
-from tensorlayer.layers import Conv2d as conv_2d
 
-def convBlock(data,numIN, numOut, name = "",reuse=False):
-    with tf.variable_scope(name,reuse=reuse):
-        bn1 = tl.layers.BatchNormLayer(data, name="bn1",act=tf.nn.relu)
-        conv1 = conv_2d(bn1,numOut / 2,filter_size=(1,1), name="conv1")
+import numpy as np
+def _conv_block(inputs, numOut, name='conv_block',is_training=True):
+    """ Convolutional Block
+    Args:
+        inputs	: Input Tensor
+        numOut	: Desired output number of channel
+        name	: Name of the block
+    Returns:
+        conv_3	: Output Tensor
+    """
 
-        bn2 = tl.layers.BatchNormLayer(conv1, name="bn2",act=tf.nn.relu)
+    with tf.name_scope(name):
+        with tf.name_scope('norm_1'):
+            norm_1 = tf.contrib.layers.batch_norm(inputs, 0.9, epsilon=1e-5, activation_fn=tf.nn.relu,
+                                                  is_training=is_training)
+            conv_1 = _conv(norm_1, int(numOut / 2), kernel_size=1, strides=1, pad='VALID', name='conv')
+        with tf.name_scope('norm_2'):
+            norm_2 = tf.contrib.layers.batch_norm(conv_1, 0.9, epsilon=1e-5, activation_fn=tf.nn.relu,
+                                                  is_training=is_training)
+            pad = tf.pad(norm_2, np.array([[0, 0], [1, 1], [1, 1], [0, 0]]), name='pad')
+            conv_2 = _conv(pad, int(numOut / 2), kernel_size=3, strides=1, pad='VALID', name='conv')
+        with tf.name_scope('norm_3'):
+            norm_3 = tf.contrib.layers.batch_norm(conv_2, 0.9, epsilon=1e-5, activation_fn=tf.nn.relu,
+                                                  is_training=is_training)
+            conv_3 = _conv(norm_3, int(numOut), kernel_size=1, strides=1, pad='VALID', name='conv')
+        return conv_3
 
-        conv2 = conv_2d(bn2, numOut / 2, filter_size=(3, 3),padding='SAME', name="conv2")
 
-        bn3 = tl.layers.BatchNormLayer(conv2, name="bn3",act=tf.nn.relu)
+def _skip_layer( inputs, numOut, name='skip_layer'):
+    """ Skip Layer
+    Args:
+        inputs	: Input Tensor
+        numOut	: Desired output number of channel
+        name	: Name of the bloc
+    Returns:
+        Tensor of shape (None, inputs.height, inputs.width, numOut)
+    """
+    with tf.name_scope(name):
+        if inputs.get_shape().as_list()[3] == numOut:
+            return inputs
+        else:
+            conv = _conv(inputs, numOut, kernel_size=1, strides=1, name='conv')
+            return conv
 
-        conv3 = conv_2d(bn3, numOut, filter_size=(1, 1), name="conv3")
+def Residual( inputs, numOut, name = 'residual_block',is_training=True):
 
-        return conv3
+    with tf.name_scope(name):
+        convb = _conv_block(inputs, numOut)
+        skipl = _skip_layer(inputs, numOut)
 
-def skipLayer(data,numin, numOut,name="",reuse=False):
-    if numin == numOut:
-        return data
-    else:
-        with tf.variable_scope(name,reuse=reuse):
-            return conv_2d(data,numOut,filter_size=(1,1),strides=(1,1),name="conv")
+        return tf.add_n([convb, skipl], name='res_block')
 
-def Residual(data,numin, numOut,name,reuse=False):
 
-    #with mx.name.Prefix("%s_%s_" % (name, suffix)):
-    with tf.variable_scope(name, reuse=reuse):
-        convb = convBlock(data, numin,numOut,name="%s_convBlock" %(name))
-        skiplayer = skipLayer(data, numin,numOut, name="%s_skipLayer"%(name))
-        x = tl.layers.ElementwiseLayer(layer=[convb, skiplayer],
-        combine_fn = tf.add, name="%s_add_layer" % (name))
-        #x = tf.add_n([convb, skiplayer],name="%s_add_layer"%(name))
-        return x
+def _conv(inputs, filters, kernel_size=1, strides=1, pad='VALID', name='conv'):
+    """ Spatial Convolution (CONV2D)
+    Args:
+        inputs			: Input Tensor (Data Type : NHWC)
+        filters		: Number of filters (channels)
+        kernel_size	: Size of kernel
+        strides		: Stride
+        pad				: Padding Type (VALID/SAME) # DO NOT USE 'SAME' NETWORK BUILT FOR VALID
+        name			: Name of the block
+    Returns:
+        conv			: Output Tensor (Convolved Input)
+    """
+    with tf.name_scope(name):
+        # Kernel for convolution, Xavier Initialisation
+        kernel = tf.Variable(tf.contrib.layers.xavier_initializer(uniform=False)(
+            [kernel_size, kernel_size, inputs.get_shape().as_list()[3], filters]), name='weights')
+        conv = tf.nn.conv2d(inputs, kernel, [1, strides, strides, 1], padding=pad, data_format='NHWC')
+        return conv
+

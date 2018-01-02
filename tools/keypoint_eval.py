@@ -165,9 +165,9 @@ def keypoint_eval(predictions, annotations, return_dict):
     # compute mAP by APs under different oks thresholds
     average_precision = []
     oks_all = np.array(oks_all)
-    # for threshold in np.linspace(0.5, 0.95, 10):
-    #     average_precision.append(np.sum(oks_all > threshold) / np.float32(oks_num))
-    average_precision.append(np.sum(oks_all > 0.5) / np.float32(oks_num))
+    for threshold in np.linspace(0.5, 0.95, 10):
+        average_precision.append(np.sum(oks_all > threshold) / np.float32(oks_num))
+    #average_precision.append(np.sum(oks_all > 0.5) / np.float32(oks_num))
     return_dict['score'] = np.mean(average_precision)
 
     return return_dict

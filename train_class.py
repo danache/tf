@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
-import tensorlayer as tl
+
 from eval.ht2coord import getjointcoord
 
 from tools.keypoint_eval import getScore
@@ -43,6 +43,7 @@ class train_class():
         self.val_batch_num=val_batch_num
         self.train_mae = tf.Variable(0, trainable=False, dtype=tf.float32, )
         self.train_label=train_label
+        self.training = True
     def average_gradients(self,tower_grads):
         """Calculate the average gradient for each shared variable across all towers.
         Note that this function provides a synchronization point across all towers.
@@ -59,11 +60,9 @@ class train_class():
             # Note that each grad_and_vars looks like the following:
             #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
             grads = []
-            flag = False
             for g, _ in grad_and_vars:
                 # if g:
                     # Add 0 dimension to the gradients to represent the tower.
-                    flag = True
                     expanded_g = tf.expand_dims(g, 0)
 
                     # Append on a 'tower' dimension which we will average over below.
@@ -112,80 +111,142 @@ class train_class():
         self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr)
         flag = False
         self.loss = []
+        c = tf.constant(np.arange(0, self.batch_size))
+        shuff = tf.random_shuffle(c)
+        n = shuff[0]
+        n = tf.cast(n,tf.int32 )
+        # with tf.variable_scope(tf.get_variable_scope()) as vscope:
+        #     for i in self.gpu:
+        #         with tf.device(("/gpu:%d" % i)):
+        #             with tf.name_scope('gpu_%d' % (i)) as scope:
+        #
+        #                 self.train_output = self.model(train_img,reuse=flag)
+        #
+        #                 flag = True
+        #                 with tf.name_scope('loss'):
+        #                     with tf.device(self.cpu):
+        #                         #allloss = tf.losses.mean_squared_error(labels=self.train_heatmap,predictions=self.train_output.outputs)
+        #
+        #                         total_loss = 0
+        #                         for nsta in range(self.nstack):
+        #                             total_loss += tf.reduce_mean(tf.square(tf.subtract(self.train_heatmap,
+        #                                                                                                      self.train_output[
+        #                                                                                                          nsta].outputs)), [1, 2, 3])
+        #                                 # tf.losses.mean_squared_error(labels=self.train_heatmap[:,nsta,:],
+        #                                 #                                        predictions=self.train_output[nsta].outputs)
+        #                         # total_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.train_output.outputs,
+        #                         #                                                                    labels=self.train_heatmap),
+        #                         #                            name='cross_entropy_loss')
+        #
+        #                         self.loss.append(total_loss)
+        #
+        #                         with tf.name_scope('training'):
+        #                             # print(type(self.loss))
+        #                             tf.summary.scalar('loss_%d' % (i), self.loss[i], collections=['train'])
+        #                         with tf.name_scope('heatmap'):
+        #
+        #                             im = train_img[n, :, :, :]
+        #                             im = tf.expand_dims(im, 0)
+        #
+        #                             tf.summary.image(name=('origin_img_%d'%(i)), tensor=im, collections=['train'])
+        #                             tout = []
+        #                             tgt = []
+        #                             for joint in range(self.partnum):
+        #                                 hm = self.train_output[-1].outputs[n, :, :, joint]
+        #                                 hm = tf.expand_dims(hm, -1)
+        #                                 hm = tf.expand_dims(hm, 0)
+        #                                 #hm = hm * 255
+        #                                 gt = self.train_heatmap[n, :, :, joint]
+        #
+        #                                 gt = tf.expand_dims(gt, -1)
+        #                                 gt = tf.expand_dims(gt, 0)
+        #                                 #gt = gt * 255
+        #                                 tf.summary.image('ground_truth_%s_%d' % (self.joints[joint],0), tensor=gt,
+        #                                                  collections=['train'])
+        #                                 tf.summary.image('heatmp_%s_%d' % (self.joints[joint],0), hm, collections=['train'])
+        #                                 tmp = self.train_output[-1].outputs[n,  :, :, joint]
+        #                                 tout.append(tf.cast(tf.equal(tf.reduce_max(tmp), tmp), tf.float32))
+        #                                 tmp2 = self.train_heatmap[n, :, :, joint]
+        #                                 tgt.append(tf.cast(tf.equal(tf.reduce_max(tmp2), tmp2), tf.float32))
+        #                             train_gt = tf.add_n(tgt)
+        #
+        #                             train_gt = tf.expand_dims(train_gt, 0)
+        #                             train_gt = tf.expand_dims(train_gt, -1)
+        #                             train_hm = tf.add_n(tout)
+        #
+        #                             train_hm = tf.expand_dims(train_hm, 0)
+        #                             train_hm = tf.expand_dims(train_hm, -1)
+        #                             tf.summary.image('train_ground_truth', tensor=train_gt, collections=['train'])
+        #                             tf.summary.image('train_heatmp', train_hm, collections=['train'])
+        #
+        #
+        #                 grads = self.rmsprop.compute_gradients(loss= self.loss[i])
+        #                 tower_grads.append(grads)
+        # grads_ = self.average_gradients(tower_grads)
+        # self.apply_gradient_op = self.rmsprop.apply_gradients(grads_)
 
-        with tf.variable_scope(tf.get_variable_scope()) as vscope:
-            for i in self.gpu:
-                with tf.device(("/gpu:%d" % i)):
-                    with tf.name_scope('gpu_%d' % ( i)) as scope:
-
-                        self.train_output = self.model(train_img,reuse=flag)
-
-                        flag = True
-                        with tf.name_scope('loss'):
-                            with tf.device(self.cpu):
-                                allloss = tf.losses.mean_squared_error(labels=self.train_heatmap,predictions=self.train_output.outputs)
-
-                                self.loss.append(allloss)
-
-                                with tf.name_scope('training'):
-                                    # print(type(self.loss))
-                                    tf.summary.scalar('loss_%d' % (i), self.loss[i], collections=['train'])
-                                with tf.name_scope('heatmap'):
-                                    c = tf.constant(np.arange(0, self.batch_size))
-                                    shuff = tf.random_shuffle(c)
-                                    n = shuff[0]
-                                    n = tf.cast(n,tf.int32 )
-                                    im = train_img[n, :, :, :]
-                                    im = tf.expand_dims(im, 0)
-
-                                    tf.summary.image(name=('origin_img_%d'%(i)), tensor=im, collections=['train'])
-                                    tout = []
-                                    tgt = []
-                                    for joint in range(self.partnum):
-                                        hm = self.train_output.outputs[n, self.nstack - 1, :, :, joint]
-                                        hm = tf.expand_dims(hm, -1)
-                                        hm = tf.expand_dims(hm, 0)
-                                        hm = hm * 255
-                                        gt = self.train_heatmap[n, self.nstack - 1, :, :, joint]
-
-                                        gt = tf.expand_dims(gt, -1)
-                                        gt = tf.expand_dims(gt, 0)
-                                        gt = gt * 255
-                                        tf.summary.image('ground_truth_%s_%d' % (self.joints[joint],i), tensor=gt,
-                                                         collections=['train'])
-                                        tf.summary.image('heatmp_%s_%d' % (self.joints[joint],i), hm, collections=['train'])
-                                        tmp = self.train_output.outputs[n, self.nstack - 1, :, :, joint]
-                                        tout.append(tf.cast(tf.equal(tf.reduce_max(tmp), tmp), tf.float32))
-                                        tmp2 = self.train_heatmap[n, self.nstack - 1, :, :, joint]
-                                        tgt.append(tf.cast(tf.equal(tf.reduce_max(tmp2), tmp2), tf.float32))
-                                    train_gt = tf.add_n(tgt)
-
-                                    train_gt = tf.expand_dims(train_gt, 0)
-                                    train_gt = tf.expand_dims(train_gt, -1)
-                                    train_hm = tf.add_n(tout)
-
-                                    train_hm = tf.expand_dims(train_hm, 0)
-                                    train_hm = tf.expand_dims(train_hm, -1)
-                                    tf.summary.image('train_ground_truth', tensor=train_gt, collections=['train'])
-                                    tf.summary.image('train_heatmp', train_hm, collections=['train'])
+        ###########
+        #self.train_output = self._graph_hourglass(train_img)
+        self.train_output = self.model(train_img)
 
 
-                        tf.get_variable_scope().reuse_variables()
+        with tf.name_scope('heatmap'):
 
-                        grads = self.rmsprop.compute_gradients(loss= self.loss[i])
-                        tower_grads.append(grads)
-        grads_ = self.average_gradients(tower_grads)
-        self.apply_gradient_op = self.rmsprop.apply_gradients(grads_)
+            im = train_img[n, :, :, :]
+            im = tf.expand_dims(im, 0)
+
+            tf.summary.image(name=('origin_img'), tensor=im, collections=['train'])
+            tout = []
+            tgt = []
+            for joint in range(self.partnum):
+                hm = self.train_output[-1][n, :, :, joint]
+                hm = tf.expand_dims(hm, -1)
+                hm = tf.expand_dims(hm, 0)
+                #hm = hm * 255
+                gt = self.train_heatmap[n, :, :, joint]
+
+                gt = tf.expand_dims(gt, -1)
+                gt = tf.expand_dims(gt, 0)
+                #gt = gt * 255
+                tf.summary.image('ground_truth_%s' % (self.joints[joint]), tensor=gt,
+                                 collections=['train'])
+                tf.summary.image('heatmp_%s_%d' % (self.joints[joint],0), hm, collections=['train'])
+                tmp = self.train_output[-1][n,  :, :, joint]
+                tout.append(tf.cast(tf.equal(tf.reduce_max(tmp), tmp), tf.float32))
+                tmp2 = self.train_heatmap[n, :, :, joint]
+                tgt.append(tf.cast(tf.equal(tf.reduce_max(tmp2), tmp2), tf.float32))
+            train_gt = tf.add_n(tgt)
+
+            train_gt = tf.expand_dims(train_gt, 0)
+            train_gt = tf.expand_dims(train_gt, -1)
+            train_hm = tf.add_n(tout)
+
+            train_hm = tf.expand_dims(train_hm, 0)
+            train_hm = tf.expand_dims(train_hm, -1)
+            tf.summary.image('train_ground_truth', tensor=train_gt, collections=['train'])
+            tf.summary.image('train_heatmp', train_hm, collections=['train'])
 
 
+        self.loss = 0
+        for nsta in range(len(self.train_output)):
+            self.loss += tf.losses.mean_squared_error(labels=self.train_heatmap,predictions=self.train_output[nsta])
 
+        with tf.name_scope('training'):
+            # print(type(self.loss))
+            tf.summary.scalar('loss' , self.loss, collections=['train'])
+        # self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.train_output.outputs, labels=self.train_heatmap),
+        #                name='cross_entropy_loss')
+        self.apply_gradient_op = self.rmsprop.minimize(self.loss)
+        ######
         if self.valid_record:
             valid_data = self.valid_record
             self.valid_img,  self.valid_heatmap, self.valid_center, self.valid_scale, self.valid_name = valid_data.getData()
 
             self.valid_num = valid_data.getN()
             self.validIter = int(self.valid_num / self.batch_size)
-            self.valid_output = self.model(self.valid_img, reuse=True)
+            #self.valid_output = self._graph_hourglass(self.valid_img)
+            self.valid_output = self.model(self.valid_img)
+
             generate_valid_done_time = time.time()
             print('train data generate in ' + str(int(generate_valid_done_time - generate_train_done_time )) + ' sec.')
             print("valid num is %d" % (self.valid_num))
@@ -198,15 +259,15 @@ class train_class():
                 tf.summary.image(name=('origin_valid_img' ), tensor=val_im, collections=['test'])
 
                 for joint in range(self.partnum):
-                    val_hm = self.valid_output.outputs[n, self.nstack - 1, :, :, joint]
+                    val_hm = self.valid_output[-1][n, :, :, joint]
                     val_hm = tf.expand_dims(val_hm, -1)
                     val_hm = tf.expand_dims(val_hm, 0)
-                    val_hm = val_hm * 255
-                    val_gt = self.valid_heatmap[n, self.nstack - 1, :, :, joint]
+                    #val_hm = val_hm * 255
+                    val_gt = self.valid_heatmap[n,  :, :, joint]
 
                     val_gt = tf.expand_dims(val_gt, -1)
                     val_gt = tf.expand_dims(val_gt, 0)
-                    val_gt = val_gt * 255
+                    #val_gt = val_gt * 255
                     tf.summary.image('valid_ground_truth_%s' % (self.joints[joint]), tensor=val_gt,
                                      collections=['test'])
                     tf.summary.image('valid_heatmp_%s' % (self.joints[joint]), val_hm, collections=['test'])
@@ -234,10 +295,10 @@ class train_class():
             with tf.name_scope('MAE'):
                 tf.summary.scalar("MAE", self.mae, collections=['test'])
 
-        self.train_coord =reverseFromHt(self.train_output.outputs, nstack=self.nstack, batch_size=self.batch_size, num_joint=self.partnum,
+        self.train_coord =reverseFromHt(self.train_output[-1], nstack=self.nstack, batch_size=self.batch_size, num_joint=self.partnum,
                                         scale=self.train_scale, center=self.train_center, res=[64, 64])
 
-        self.valid_coord = reverseFromHt(self.valid_output.outputs, nstack=self.nstack, batch_size=self.batch_size,
+        self.valid_coord = reverseFromHt(self.valid_output[-1], nstack=self.nstack, batch_size=self.batch_size,
                                          num_joint=self.partnum,
                                          scale=self.valid_scale, center=self.valid_center, res=[64, 64])
 
@@ -253,25 +314,24 @@ class train_class():
         self.Session.run(tf.global_variables_initializer())
 
         self.Session.run(tf.local_variables_initializer())
-        tl.layers.initialize_global_variables(self.Session)
         print("init done")
 
     def training_init(self, nEpochs=10, valStep=3000,showStep=10):
         with tf.name_scope('Session'):
-            with tf.device(self.gpu[0]):
-                self._init_weight()
-                self.saver = tf.train.Saver()
-                init = tf.group(tf.global_variables_initializer(),
-                                tf.local_variables_initializer())
 
-                self.coord = tf.train.Coordinator()
-                self.threads = tf.train.start_queue_runners(coord=self.coord, sess=self.Session)
-                self.Session.run(init)
+            self._init_weight()
+            self.saver = tf.train.Saver()
+            init = tf.group(tf.global_variables_initializer(),
+                            tf.local_variables_initializer())
 
-                if self.resume:
-                    print("resume from"+self.resume)
-                    self.saver.restore(self.Session, self.resume)
-                self.train(nEpochs, valStep,showStep)
+            self.coord = tf.train.Coordinator()
+            self.threads = tf.train.start_queue_runners(coord=self.coord, sess=self.Session)
+            self.Session.run(init)
+
+            if self.resume:
+                print("resume from"+self.resume)
+                self.saver.restore(self.Session, self.resume)
+            self.train(nEpochs, valStep,showStep)
 
     def train(self, nEpochs=10, valStep = 3000,showStep=10 ):
         #best_val = open("./best_val.txt", "w")
@@ -295,6 +355,7 @@ class train_class():
 
         last_lr = self.learn_r
         hm_decay = 1
+        valStep = min(valStep, n_step_epoch -100)
         if self.validIter < self.val_batch_num:
             val_batch_num = self.validIter
         else:
@@ -319,8 +380,8 @@ class train_class():
                 sys.stdout.flush()
 
                 if n_batch % showStep == 0:
-                    _,lo ,summary,last_lr,train_coord,train_name= self.Session.run\
-                        ([self.apply_gradient_op,self.loss,self.train_merged,self.lr,self.train_coord,self.train_name],
+                    _,summary,last_lr,train_coord,train_name= self.Session.run\
+                        ([self.apply_gradient_op,self.train_merged,self.lr,self.train_coord,self.train_name],
                          feed_dict={self.last_learning_rate : last_lr, self.h_decay:hm_decay})
 
                     self.train_writer.add_summary(summary, epoch * n_step_epoch + n_batch)
@@ -343,11 +404,11 @@ class train_class():
 
 
                 else:
-                    _, lo , last_lr = self.Session.run([self.apply_gradient_op, self.loss,self.lr],
+                    _, last_lr = self.Session.run([self.apply_gradient_op, self.lr],
                                              feed_dict={self.last_learning_rate : last_lr, self.h_decay:hm_decay})
-                loss += lo[0]
+
                 hm_decay = 1.
-                avg_cost += lo[0] / n_step_epoch
+
                 if (n_batch+1) % valStep == 0:
 
                     if self.valid_record:
@@ -358,7 +419,7 @@ class train_class():
                         valid_predictions['annos'] = dict()
                         val_begin_time = time.time()
 
-                        for i in range(self.validIter):  # self.validIter
+                        for i in range(100):  # self.validIter
                             val_percent = ((i + 1) / val_batch_num) * 100
                             val_num = np.int(20 * val_percent / 100)
                             val_tToEpoch = int((time.time() - val_begin) * (100 - val_percent) / (val_percent))
@@ -398,12 +459,12 @@ class train_class():
                         self.valid_writer.add_summary(valid_summary[0], epoch * n_step_epoch + n_batch)
                         self.valid_writer.flush()
 
-
-            model_dir = os.path.join(self.save_dir, self.name + '_' + str(epoch) +
-                                          "_" + "base")
-            print("epoch %d , save at "%epoch + model_dir)
-            with tf.name_scope('save'):
-                self.saver.save(self.Session, model_dir)
+            if epoch % 4 == 0:
+                model_dir = os.path.join(self.save_dir, self.name + '_' + str(epoch) +
+                                              "_" + "base")
+                print("epoch %d , save at "%epoch + model_dir)
+                with tf.name_scope('save'):
+                    self.saver.save(self.Session, model_dir)
             epochfinishTime = time.time()
             # if epoch % 5 == 0:
             #     hm_decay = self.human_decay
@@ -422,3 +483,181 @@ class train_class():
         self.coord.join(self.threads)
         self.Session.close()
         print('Training Done')
+
+    def _graph_hourglass(self, inputs):
+        """Create the Network
+        Args:
+            inputs : TF Tensor (placeholder) of shape (None, 256, 256, 3) #TODO : Create a parameter for customize size
+        """
+
+        with tf.name_scope('model'):
+            with tf.name_scope('preprocessing'):
+                # Input Dim : nbImages x 256 x 256 x 3
+                pad1 = tf.pad(inputs, [[0, 0], [2, 2], [2, 2], [0, 0]], name='pad_1')
+                # Dim pad1 : nbImages x 260 x 260 x 3
+                conv1 = self._conv_bn_relu(pad1, filters=64, kernel_size=6, strides=2, name='conv_256_to_128')
+                # Dim conv1 : nbImages x 128 x 128 x 64
+                r1 = self._residual(conv1, numOut=128, name='r1')
+                # Dim pad1 : nbImages x 128 x 128 x 128
+                pool1 = tf.contrib.layers.max_pool2d(r1, [2, 2], [2, 2], padding='VALID')
+                # Dim pool1 : nbImages x 64 x 64 x 128
+
+                r2 = self._residual(pool1, numOut=int(256 / 2), name='r2')
+                r3 = self._residual(r2, numOut=256, name='r3')
+            # Storage Table
+            hg = [None] * self.nstack
+            ll = [None] * self.nstack
+            ll_ = [None] * self.nstack
+            drop = [None] * self.nstack
+            out = [None] * self.nstack
+            out_ = [None] * self.nstack
+            sum_ = [None] * self.nstack
+            
+            with tf.name_scope('stacks'):
+                with tf.name_scope('stage_0'):
+                    hg[0] = self._hourglass(r3, 4, 256, 'hourglass')
+                    ll[0] = self._residual(hg[0], numOut=256, name='Residual_0')
+                    ll_[0] = self._conv(ll[0], 256, 1, 1, 'VALID', 'll')
+  
+                    out[0] = self._conv(ll[0], 14, 1, 1, 'VALID', 'out')
+                    out_[0] = self._conv(out[0], 256, 1, 1, 'VALID', 'out_')
+                    sum_[0] = tf.add_n([out_[0], r3, ll_[0]], name='merge')
+                for i in range(1, self.nstack - 1):
+                    with tf.name_scope('stage_' + str(i)):
+                        hg[i] = self._hourglass(sum_[i - 1], 4, 256, 'hourglass')
+                        ll[i] = self._residual(hg[i], numOut=256, name='Residual_0')
+                        ll_[i] = self._conv(ll[i], 256, 1, 1, 'VALID', 'll')
+
+                        out[i] = self._conv(ll[i], 14, 1, 1, 'VALID', 'out')
+                        out_[i] = self._conv(out[i], 256, 1, 1, 'VALID', 'out_')
+                        sum_[i] = tf.add_n([out_[i], sum_[i - 1], ll_[0]], name='merge')
+                with tf.name_scope('stage_' + str(self.nstack - 1)):
+                    hg[self.nstack - 1] = self._hourglass(sum_[self.nstack - 2], 4, 256,
+                                                          'hourglass')
+
+                    ll[self.nstack - 1] = self._residual(hg[self.nstack - 1], numOut=256, name='Residual_0')
+
+                    out[self.nstack - 1] = self._conv(ll[self.nstack - 1], 14, 1, 1, 'VALID',
+                                                              'out')
+                return out
+
+    def _conv(self, inputs, filters, kernel_size=1, strides=1, pad='VALID', name='conv'):
+        """ Spatial Convolution (CONV2D)
+        Args:
+            inputs			: Input Tensor (Data Type : NHWC)
+            filters		: Number of filters (channels)
+            kernel_size	: Size of kernel
+            strides		: Stride
+            pad				: Padding Type (VALID/SAME) # DO NOT USE 'SAME' NETWORK BUILT FOR VALID
+            name			: Name of the block
+        Returns:
+            conv			: Output Tensor (Convolved Input)
+        """
+        with tf.name_scope(name):
+            # Kernel for convolution, Xavier Initialisation
+            kernel = tf.Variable(tf.contrib.layers.xavier_initializer(uniform=False)(
+                [kernel_size, kernel_size, inputs.get_shape().as_list()[3], filters]), name='weights')
+            conv = tf.nn.conv2d(inputs, kernel, [1, strides, strides, 1], padding=pad, data_format='NHWC')
+
+            return conv
+
+    def _conv_bn_relu(self, inputs, filters, kernel_size=1, strides=1, pad='VALID', name='conv_bn_relu'):
+        """ Spatial Convolution (CONV2D) + BatchNormalization + ReLU Activation
+        Args:
+            inputs			: Input Tensor (Data Type : NHWC)
+            filters		: Number of filters (channels)
+            kernel_size	: Size of kernel
+            strides		: Stride
+            pad				: Padding Type (VALID/SAME) # DO NOT USE 'SAME' NETWORK BUILT FOR VALID
+            name			: Name of the block
+        Returns:
+            norm			: Output Tensor
+        """
+        with tf.name_scope(name):
+            kernel = tf.Variable(tf.contrib.layers.xavier_initializer(uniform=False)(
+                [kernel_size, kernel_size, inputs.get_shape().as_list()[3], filters]), name='weights')
+            conv = tf.nn.conv2d(inputs, kernel, [1, strides, strides, 1], padding='VALID', data_format='NHWC')
+            norm = tf.contrib.layers.batch_norm(conv, 0.9, epsilon=1e-5, activation_fn=tf.nn.relu,
+                                                is_training=self.training)
+
+            return norm
+
+    def _conv_block(self, inputs, numOut, name='conv_block'):
+        """ Convolutional Block
+        Args:
+            inputs	: Input Tensor
+            numOut	: Desired output number of channel
+            name	: Name of the block
+        Returns:
+            conv_3	: Output Tensor
+        """
+
+        with tf.name_scope(name):
+            with tf.name_scope('norm_1'):
+                norm_1 = tf.contrib.layers.batch_norm(inputs, 0.9, epsilon=1e-5, activation_fn=tf.nn.relu,
+                                                      is_training=self.training)
+                conv_1 = self._conv(norm_1, int(numOut / 2), kernel_size=1, strides=1, pad='VALID', name='conv')
+            with tf.name_scope('norm_2'):
+                norm_2 = tf.contrib.layers.batch_norm(conv_1, 0.9, epsilon=1e-5, activation_fn=tf.nn.relu,
+                                                      is_training=self.training)
+                pad = tf.pad(norm_2, np.array([[0, 0], [1, 1], [1, 1], [0, 0]]), name='pad')
+                conv_2 = self._conv(pad, int(numOut / 2), kernel_size=3, strides=1, pad='VALID', name='conv')
+            with tf.name_scope('norm_3'):
+                norm_3 = tf.contrib.layers.batch_norm(conv_2, 0.9, epsilon=1e-5, activation_fn=tf.nn.relu,
+                                                      is_training=self.training)
+                conv_3 = self._conv(norm_3, int(numOut), kernel_size=1, strides=1, pad='VALID', name='conv')
+            return conv_3
+
+    def _skip_layer(self, inputs, numOut, name='skip_layer'):
+        """ Skip Layer
+        Args:
+            inputs	: Input Tensor
+            numOut	: Desired output number of channel
+            name	: Name of the bloc
+        Returns:
+            Tensor of shape (None, inputs.height, inputs.width, numOut)
+        """
+        with tf.name_scope(name):
+            if inputs.get_shape().as_list()[3] == numOut:
+                return inputs
+            else:
+                conv = self._conv(inputs, numOut, kernel_size=1, strides=1, name='conv')
+                return conv
+
+    def _residual(self, inputs, numOut, name='residual_block'):
+        """ Residual Unit
+        Args:
+            inputs	: Input Tensor
+            numOut	: Number of Output Features (channels)
+            name	: Name of the block
+        """
+        with tf.name_scope(name):
+            convb = self._conv_block(inputs, numOut)
+            skipl = self._skip_layer(inputs, numOut)
+
+            return tf.add_n([convb, skipl], name='res_block')
+
+    def _hourglass(self, inputs, n, numOut, name='hourglass'):
+        """ Hourglass Module
+        Args:
+            inputs	: Input Tensor
+            n		: Number of downsampling step
+            numOut	: Number of Output Features (channels)
+            name	: Name of the block
+        """
+        with tf.name_scope(name):
+            # Upper Branch
+            up_1 = self._residual(inputs, numOut, name='up_1')
+            # Lower Branch
+            low_ = tf.contrib.layers.max_pool2d(inputs, [2, 2], [2, 2], padding='VALID')
+            low_1 = self._residual(low_, numOut, name='low_1')
+
+            if n > 0:
+                low_2 = self._hourglass(low_1, n - 1, numOut, name='low_2')
+            else:
+                low_2 = self._residual(low_1, numOut, name='low_2')
+
+            low_3 = self._residual(low_2, numOut, name='low_3')
+            up_2 = tf.image.resize_nearest_neighbor(low_3, tf.shape(low_3)[1:3] * 2, name='upsampling')
+
+            return tf.add_n([up_2, up_1], name='out_hg')

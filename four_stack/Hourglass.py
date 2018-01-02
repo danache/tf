@@ -1,190 +1,174 @@
-import time
+
 import tensorflow as tf
-import numpy as np
-import os
-import cv2
-import tensorlayer as tl
-from tensorlayer.layers import Conv2d as conv_2d
+
 from hg_models.layers.Residual import Residual
-from dataGenerator.datagen import DataGenerator
-from eval.eval import accuracy_computation
+
 
 class HourglassModel():
-    def __init__(self, nFeat=256, nStack=4, nModules=1, outputDim=14,
+    def __init__(self, nFeats=256, nStack=4, nModules=1, outputDim=14,nLow=4,training=True
                  ):
 
         self.nStack = nStack
-        self.nFeats = nFeat
+        self.nFeats = nFeats
         self.nModules = nModules
         self.partnum = outputDim
+        self.training = training
+        self.nLow = nLow
+
+    def _hourglass(self, inputs, n, numOut, name='hourglass'):
+        """ Hourglass Module
+        Args:
+            inputs	: Input Tensor
+            n		: Number of downsampling step
+            numOut	: Number of Output Features (channels)
+            name	: Name of the block
+        """
+        with tf.name_scope(name):
+            # Upper Branch
+            up = [None] * self.nModules
+
+            up[0] = Residual(inputs, numOut, name='up_0')
+            for i in range(1,self.nModules):
+                up[i] = Residual(up[i - 1], numOut, name='up_%d' % i)
+            # Lower Branch
+            low_ = tf.contrib.layers.max_pool2d(inputs, [2, 2], [2, 2], padding='VALID')
+            low1 = [None] * self.nModules
+            low1[0] = Residual(low_, numOut, name='low_0')
+            for j in range(1,self.nModules):
+                low1[j] = Residual(low1[j - 1], numOut, name='low_%d' % j)
 
 
-    def hourglass(self,data, n, f, nModual, reuse=False, name=""):
-
-        with tf.variable_scope(name, reuse=reuse):
-            pool = tl.layers.MaxPool2d(data, (2, 2), strides=(2, 2), name='pool1')
-
-            up = []
-            low = []
-
-            for i in range(nModual):
-                if i == 0:
-                    tmpup = Residual(data, f, f, name='%s_tmpup_' % (name) + str(i), reuse=reuse)
-                    tmplow = Residual(pool, f, f, name='%s_tmplow_' % (name) + str(i), reuse=reuse)
-                else:
-
-                    tmpup = Residual(up[i - 1], f, f, name='%s_tmpup_' % (name) + str(i), reuse=reuse)
-                    tmplow = Residual(low[i - 1], f, f, name='%s_tmplow_' % (name) + str(i), reuse=reuse)
-
-                up.append(tmpup)
-                low.append(tmplow)
-            low2_ = []
-            if n > 1:
-                low2 = self.hourglass(low[-1], n - 1, f, nModual=nModual,
-                                 name=name +  "_low2"+"_" + str(n - 1), reuse=reuse)
-                low2_.append(low2)
+            if n > 0:
+                low2 = [None]
+                low2[0] = self._hourglass(low1[self.nModules - 1], n - 1, numOut, name='low_2')
             else:
-                for j in range(nModual):
+                low2 = [None] * self.nModules
+                low2[0] = Residual(low1[self.nModules - 1], numOut, name='low2_0')
+                for k in range(1, self.nModules):
+                    low2[k] = Residual(low2[k - 1], numOut, name='low2_%d' % k)
 
-                    if j == 0:
-                        tmplow2 = Residual(low[-1], f, f, name='%s_tmplow2_' % (name) + str(j), reuse=reuse)
-                    else:
-                        tmplow2 = Residual(low2_[j - 1], f, f, name='%s_tmplow2_' % (name) + str(j), reuse=reuse)
-                    low2_.append(tmplow2)
-            low3_ = []
-            for k in range(nModual):
-                if k == 0:
-                    tmplow3 = Residual(low2_[-1], f, f, name='%s_tmplow3_' % (name) + str(k), reuse=reuse)
-                else:
-                    tmplow3 = Residual(low3_[k - 1], f, f, name='%s_tmplow3_' % (name) + str(k), reuse=reuse)
-                low3_.append(tmplow3)
+            low3 = [None] * self.nModules
+            low3[0] = Residual(low2[-1], numOut, name='low_3_0')
+            for p in range(1,self.nModules):
+                low3[p] = Residual(low3[p - 1], numOut, name='low3_%d' % j)
+            up_2 = tf.image.resize_nearest_neighbor(low3[-1], tf.shape(low3[-1])[1:3] * 2, name='upsampling')
 
-            up2 = tl.layers.UpSampling2dLayer(low3_[-1], size=[2, 2], is_scale=True, method=1,
-                                              name="%s_Upsample" % (name))
+            return tf.add_n([up_2, up[-1]], name='out_hg')
 
-            x = tl.layers.ElementwiseLayer(layer=[up[nModual - 1], up2],
-                                           combine_fn=tf.add, name="%s_add_layer" % (name))
+    def lin(self, inputs, filters, kernel_size=1, strides=1, pad='VALID', name='conv_bn_relu'):
+        with tf.name_scope(name):
+            kernel = tf.Variable(tf.contrib.layers.xavier_initializer(uniform=False)(
+                [kernel_size, kernel_size, inputs.get_shape().as_list()[3], filters]), name='weights')
+            conv = tf.nn.conv2d(inputs, kernel, [1, strides, strides, 1], padding='VALID', data_format='NHWC')
+            norm = tf.contrib.layers.batch_norm(conv, 0.9, epsilon=1e-5, activation_fn=tf.nn.relu,
+                                                is_training=self.training)
+            return norm
 
-            return x
-
-    def lin(self,data, numOut, reuse=False, name=None):
-        with tf.variable_scope(name, reuse=reuse) as scope:
-            conv1 = conv_2d(data, numOut, filter_size=(1, 1), strides=(1, 1),
-                            name='conv1')
-            bn1 = tl.layers.BatchNormLayer(conv1, act=tf.nn.relu, name="bn1", )
-
-            return bn1
-
-    def _graph_hourglass(self, inputs,reuse=False):
+    def _graph_hourglass(self, inputs):
         """Create the Network
         Args:
             inputs : TF Tensor (placeholder) of shape (None, 256, 256, 3) #TODO : Create a parameter for customize size
         """
 
-        tl.layers.set_name_reuse(reuse)
-        data = tl.layers.InputLayer(inputs, name='input')
-        with tf.variable_scope("hg_model", reuse=reuse):
+        with tf.name_scope('model'):
+            with tf.name_scope('preprocessing'):
+                # Input Dim : nbImages x 256 x 256 x 3
+                pad1 = tf.pad(inputs, [[0, 0], [2, 2], [2, 2], [0, 0]], name='pad_1')
+                # Dim pad1 : nbImages x 260 x 260 x 3
+                conv1 = self._conv_bn_relu(pad1, filters=64, kernel_size=6, strides=2, name='conv_256_to_128')
+                # Dim conv1 : nbImages x 128 x 128 x 64
+                r1 = Residual(conv1, numOut=128, name='r1')
+                # Dim pad1 : nbImages x 128 x 128 x 128
+                pool1 = tf.contrib.layers.max_pool2d(r1, [2, 2], [2, 2], padding='VALID')
+                # Dim pool1 : nbImages x 64 x 64 x 128
 
-            conv1 = conv_2d(data, 64, filter_size=(7, 7), strides=(2, 2), padding='SAME', name="conv1")
-            bn1 = tl.layers.BatchNormLayer(conv1, name="bn1", act=tf.nn.relu, )
-            r1 = Residual(bn1, 64, 128, name="hg_model_Residual1", reuse=reuse)
-            pool = tl.layers.MaxPool2d(r1, (2, 2), strides=(2, 2), name="pool1")
+                r2 = Residual(pool1, numOut=int(self.nFeats / 2), name='r2')
+                r3 = Residual(r2, numOut=self.nFeats, name='r3')
+            # Storage Table
+            hg = [None] * self.nStack
+            ll = [None] * self.nStack
+            ll_ = [None] * self.nStack
+            res = [[None] * self.nModules] * self.nStack
+            out = [None] * self.nStack
+            out_ = [None] * self.nStack
+            sum_ = [None] * self.nStack
 
-            r2 = Residual(pool, 128, 128, name="hg_model_Residual2", reuse=reuse)
+            with tf.name_scope('stacks'):
+                with tf.name_scope('stage_0'):
+                    hg[0] = self._hourglass(r3, self.nLow, self.nFeats, 'hourglass')
+                    res[0][0] = Residual(hg[0], self.nFeats,name="res0")
+                    for mod in range(1,self.nModules):
+                        res[0][mod] = Residual(res[0][mod - 1], self.nFeats,name="res%d" % mod)
+                    ll[0] = self._conv_bn_relu(res[0][self.nModules - 1], self.nFeats, 1, 1, 'VALID', name='conv')
 
-            r3 = Residual(r2, 128, self.nFeats, name="hg_model_Residual3", reuse=reuse)
+                    ll_[0] = self._conv(ll[0], self.nFeats, 1, 1, 'VALID', 'll')
 
-        hg = [None] * self.nStack
+                    out[0] = self._conv(ll[0], self.partnum, 1, 1, 'VALID', 'out')
+                    out_[0] = self._conv(out[0], self.nFeats, 1, 1, 'VALID', 'out_')
+                    sum_[0] = tf.add_n([out_[0], r3, ll_[0]], name='merge')
+                for i in range(1, self.nStack - 1):
+                    with tf.name_scope('stage_' + str(i)):
+                        hg[i] = self._hourglass(sum_[i - 1], self.nLow, self.nFeats, 'hourglass')
+                        res[i][0] = Residual(hg[i], self.nFeats, name="res0")
+                        for mod in range(1, self.nModules):
+                            res[i][mod] = Residual(res[i][mod - 1], self.nFeats, name="res%d" % mod)
+                        ll[i] = self._conv_bn_relu(res[i][self.nModules - 1], self.nFeats, 1, 1, 'VALID', name='conv')
 
-        ll = [None] * self.nStack
-        fc_out = [None] * self.nStack
-        c_1 = [None] * self.nStack
-        c_2 = [None] * self.nStack
-        sum_ = [None] * self.nStack
-        resid = dict()
-        out = []
+                        ll_[i] = self._conv(ll[i], self.nFeats, 1, 1, 'VALID', 'll')
 
-        with tf.variable_scope("hg_stack", reuse=reuse):
+                        out[i] = self._conv(ll[i], self.partnum, 1, 1, 'VALID', 'out')
+                        out_[i] = self._conv(out[i], self.nFeats, 1, 1, 'VALID', 'out_')
+                        sum_[i] = tf.add_n([out_[i], sum_[i - 1], ll_[0]], name='merge')
+                with tf.name_scope('stage_' + str(self.nStack - 1)):
+                    hg[self.nStack - 1] = self._hourglass(sum_[self.nStack - 2], self.nLow, self.nFeats, 'hourglass')
+                    res[self.nStack - 1][0] = Residual(hg[self.nStack - 1], self.nFeats)
+                    for mod in range(1, self.nModules):
+                        res[self.nStack - 1][mod] = Residual(res[self.nStack - 1][mod - 1], self.nFeats, name="res%d" % mod)
 
-            hg[0] = self.hourglass(r3, n=4, f=self.nFeats, name="stage_0_hg", nModual=self.nModules, reuse=reuse)
+                    ll[self.nStack - 1] = self._conv_bn_relu(res[self.nStack - 1][self.nModules - 1], self.nFeats, 1, 1, 'VALID', 'conv')
 
-            resid["stage_0"] = []
-            for i in range(self.nModules):
-                if i == 0:
-                    tmpres = Residual(hg[0], self.nFeats, self.nFeats, name='stage_0tmpres_%d' % (i), reuse=reuse)
-                else:
-                    tmpres = Residual(resid["stage_0"][i - 1], self.nFeats, self.nFeats, name='stage_0tmpres_%d' % (i),
-                                      reuse=reuse)
-                resid["stage_0"].append(tmpres)
+                    out[self.nStack - 1] = self._conv(ll[self.nStack - 1], self.partnum, 1, 1, 'VALID', 'out')
+            return out
 
-            ll[0] = self.lin(resid["stage_0"][-1], self.nFeats, name="stage_0_lin1", reuse=reuse)
-            fc_out[0] = conv_2d(ll[0], self.partnum, filter_size=(1, 1), strides=(1, 1),
-                                name="stage_0_out")
-            out.append(fc_out[0])
-            if self.nStack > 1:
-                c_1[0] = conv_2d(ll[0], self.nFeats, filter_size=(1, 1), strides=(1, 1),
-                                 name="stage_0_conv1")
+    def _conv_bn_relu(self, inputs, filters, kernel_size=1, strides=1, pad='VALID', name='conv_bn_relu'):
+        """ Spatial Convolution (CONV2D) + BatchNormalization + ReLU Activation
+        Args:
+            inputs			: Input Tensor (Data Type : NHWC)
+            filters		: Number of filters (channels)
+            kernel_size	: Size of kernel
+            strides		: Stride
+            pad				: Padding Type (VALID/SAME) # DO NOT USE 'SAME' NETWORK BUILT FOR VALID
+            name			: Name of the block
+        Returns:
+            norm			: Output Tensor
+        """
+        with tf.name_scope(name):
+            kernel = tf.Variable(tf.contrib.layers.xavier_initializer(uniform=False)(
+                [kernel_size, kernel_size, inputs.get_shape().as_list()[3], filters]), name='weights')
+            conv = tf.nn.conv2d(inputs, kernel, [1, strides, strides, 1], padding='VALID', data_format='NHWC')
+            norm = tf.contrib.layers.batch_norm(conv, 0.9, epsilon=1e-5, activation_fn=tf.nn.relu,
+                                                is_training=self.training)
 
-                c_2[0] = conv_2d(c_1[0], self.nFeats, filter_size=(1, 1), strides=(1, 1),
-                                 name="stage_0_conv2")
-                sum_[0] = tl.layers.ElementwiseLayer(layer=[r3, c_1[0], c_2[0]],
-                                                     combine_fn=tf.add, name="stage_0_add_n")
+            return norm
 
-            for i in range(1, self.nStack - 1):
-                with tf.variable_scope('stage_%d' % (i)):
-
-                    hg[i] = self.hourglass(sum_[i - 1], n=4, f=self.nFeats, nModual=self.nModules,
-                                           name="stage_%d_hg" % (i), reuse=reuse)
-
-                    resid["stage_%d" % i] = []
-                    for j in range(self.nModules):
-                        if j == 0:
-                            tmpres = Residual(hg[i], self.nFeats, self.nFeats, name='stage_%d_tmpres_%d' % (i, j),
-                                              reuse=reuse)
-                        else:
-                            tmpres = Residual(resid["stage_%d" % i][j - 1], self.nFeats, self.nFeats,
-                                              name='stage_%d_tmpres_%d' % (i, j),
-                                              reuse=reuse)
-                        resid["stage_%d" % i].append(tmpres)
-
-                    ll[i] = self.lin(resid["stage_%d" % i][-1], self.nFeats, name="stage_%d_lin" % (i), reuse=reuse)
-                    fc_out[i] = conv_2d(ll[i], self.partnum, filter_size=(1, 1), strides=(1, 1),
-                                        name="stage_%d_out" % (i))
-                    out.append(fc_out[i])
-
-                    c_1[i] = conv_2d(ll[i], self.nFeats, filter_size=(1, 1), strides=(1, 1),
-                                     name="stage_%d_conv1" % (i))
-
-                    c_2[i] = conv_2d(c_1[i], self.nFeats, filter_size=(1, 1), strides=(1, 1),
-                                     name="stage_%d_conv2" % (i))
-                    sum_[i] = tl.layers.ElementwiseLayer(layer=[sum_[i - 1], c_1[i], c_2[i]],
-                                                         combine_fn=tf.add, name="stage_%d_add_n" % (i))
-            with tf.variable_scope('stage_%d' % (self.nStack - 1)):
-                hg[self.nStack - 1] = self.hourglass(sum_[self.nStack - 2], n=4, f=self.nFeats, nModual=self.nModules,
-                                                     name="stage_%d_hg" % (self.nStack - 1), reuse=reuse)
-                residual = []
-                for j in range(self.nModules):
-                    if j == 0:
-                        tmpres = Residual(hg[self.nStack - 1], self.nFeats, self.nFeats,
-                                          name='stage_%d_tmpres_%d' % (self.nStack - 1, j),
-                                          reuse=reuse)
-                    else:
-                        tmpres = Residual(residual[j - 1], self.nFeats, self.nFeats,
-                                          name='stage_%d_tmpres_%d' % (self.nStack - 1, j),
-                                          reuse=reuse)
-                    residual.append(tmpres)
-
-                ll[self.nStack - 1] = self.lin(residual[-1], self.nFeats,
-                                               name="stage_%d_lin1" % (self.nStack - 1), reuse=reuse)
-                fc_out[self.nStack - 1] = conv_2d(ll[self.nStack - 1], self.partnum, filter_size=(1, 1),
-                                                  strides=(1, 1),
-                                                  name="stage_%d_out" % (self.nStack - 1))
-                out.append(fc_out[self.nStack - 1])
-        # end = out[0]
-        end = tl.layers.StackLayer(out, axis=1, name='gfinal_output')
-
-        return end
-
+    def _conv(self, inputs, filters, kernel_size=1, strides=1, pad='VALID', name='conv'):
+        """ Spatial Convolution (CONV2D)
+        Args:
+            inputs			: Input Tensor (Data Type : NHWC)
+            filters		: Number of filters (channels)
+            kernel_size	: Size of kernel
+            strides		: Stride
+            pad				: Padding Type (VALID/SAME) # DO NOT USE 'SAME' NETWORK BUILT FOR VALID
+            name			: Name of the block
+        Returns:
+            conv			: Output Tensor (Convolved Input)
+        """
+        with tf.name_scope(name):
+            # Kernel for convolution, Xavier Initialisation
+            kernel = tf.Variable(tf.contrib.layers.xavier_initializer(uniform=False)(
+                [kernel_size, kernel_size, inputs.get_shape().as_list()[3], filters]), name='weights')
+            conv = tf.nn.conv2d(inputs, kernel, [1, strides, strides, 1], padding=pad, data_format='NHWC')
+            return conv
 """
     def generateModel(self):
         generate_time = time.time()

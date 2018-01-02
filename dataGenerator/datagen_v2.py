@@ -11,7 +11,6 @@ import pandas as pd
 import tensorlayer as tl
 from tools.img_tf import *
 
-
 class DataGenerator():
     def __init__(self, imgdir=None, label_dir=None, out_record=None, num_txt="", nstack=4, resize=256, scale=0.25,
                  flipping=False,
@@ -35,7 +34,7 @@ class DataGenerator():
         self.refine_num = refine_num
         if self.refine_num:
             print("max num is " + str(refine_num))
-        if os.path.exists(out_record):
+        if os.path.isdir(out_record):
             print(out_record)
             print("record file exist!!")
             self.record_path = out_record
@@ -46,11 +45,12 @@ class DataGenerator():
 
         else:
             print(self.name + "record file not exist!  creating !!!")
+            os.mkdir(out_record)
             self.generageRecord(imgdir, label_dir, out_record, extension=self.scale, resize=256)
             self.record_path = out_record
 
     def getData(self):
-        return self.read_and_decode(filename=self.record_path, flipping=self.flipping,
+        return self.read_and_decode(filepath =self.record_path, flipping=self.flipping,
                                     color_jitting=self.color_jitting, rotate=self.rotate, batch_size=self.batch_size,
                                     isvalid=self.isvalid)
 
@@ -64,7 +64,7 @@ class DataGenerator():
     #     #包括resize to size, scaling ,fliping, color jitting, rotate,
 
     def generageRecord(self, imgdir, label_tmp, out_record, extension=0.3, resize=256):
-        writer = tf.python_io.TFRecordWriter(out_record)
+
         self.number = 0
         label_tmp = pd.read_json(label_tmp)
         for index, row in label_tmp.iterrows():
@@ -78,6 +78,9 @@ class DataGenerator():
             w, h = img.shape[1], img.shape[0]
             keypoint = row["keypoint_annotations"]
             i = 0
+            fileName = ("%.6d.tfrecords" % (index))
+            writer = tf.python_io.TFRecordWriter(os.path.join(out_record,fileName))
+
             for key in anno.keys():
                 i += 1
                 if (anno[key][0] >= anno[key][2] or anno[key][1] >= anno[key][3]):
@@ -89,7 +92,6 @@ class DataGenerator():
                 board_w = x2 - x1
                 board_h = y2 - y1
                 center = np.array(((x1 + x2) * 0.5, (y1 + y2) * 0.5))
-                scale = np.array((board_h, board_w))
                 ankle = keypoint[key].copy()
 
                 new_img = img.astype(np.uint8)
@@ -108,12 +110,13 @@ class DataGenerator():
                 example = tf.train.Example(features=tf.train.Features(feature=feature))
                 writer.write(example.SerializeToString())
                 self.number += 1
+            writer.close()
             if index % 100 == 0:
                 print("creating -- %d" % (index))
             if self.refine_num:
                 if index > self.refine_num:
                     break
-        writer.close()
+
         txt = open(self.num_txt, "w")
         txt.write(str(self.number))
         txt.close()
@@ -172,7 +175,7 @@ class DataGenerator():
 
         return hm
 
-    def read_and_decode(self, filename, img_size=256, label_size=14, heatmap_size=64, flipping=False,
+    def read_and_decode(self, filepath, img_size=256, label_size=14, heatmap_size=64, flipping=False,
                         color_jitting=True, rotate=30, batch_size=32, isvalid=False):
 
         feature = {'img_raw': tf.FixedLenFeature([], tf.string),
@@ -186,7 +189,13 @@ class DataGenerator():
                    'img_name': tf.FixedLenFeature([], tf.string),
                    }
         # Create a list of filenames and pass it to a queue
-        filename_queue = tf.train.string_input_producer([filename])
+        file_lst = []
+        for root, dirs, files in os.walk(filepath):
+            for name in files:
+                file_lst.append(os.path.join(root, name))
+
+
+        filename_queue = tf.train.string_input_producer(file_lst)
         # Define a reader and read the next record
 
         reader = tf.TFRecordReader()
@@ -244,15 +253,15 @@ class DataGenerator():
         for i in range(len(heatmap)):
             heatmap[i] = tf.squeeze(heatmap[i])
         heatmap = tf.stack(heatmap, axis=-1)
-        for i in range(self.nstack):
-            repeat.append(heatmap)
-        heatmap = tf.stack(repeat, axis=0)
-
+        # for i in range(self.nstack):
+        #     repeat.append(heatmap)
+        # heatmap = tf.stack(repeat, axis=0)
+        crop_img = tf.divide(crop_img,255)
         if batch_size:
 
             min_after_dequeue = 10
             capacity = min_after_dequeue + 4 * batch_size
-            return tf.train.shuffle_batch([crop_img, heatmap, center, scale, img_name],
+            return tf.train.shuffle_batch([crop_img,heatmap, center, scale, img_name],
                                           batch_size=batch_size,
                                           num_threads=4,
                                           capacity=capacity,

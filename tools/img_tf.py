@@ -16,7 +16,7 @@ def reverseFromHt(heatmap, nstack, batch_size, num_joint, scale, center, res=[64
 
     end = []
     for n in range(batch_size):
-        hm = heatmap[n, nstack - 1, :]
+        hm = heatmap[n, :]
         res = []
         for joint in range(num_joint):
             idx = unravel_argmax(hm[:, :, joint])
