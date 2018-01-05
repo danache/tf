@@ -110,167 +110,171 @@ class train_class():
         ###list for multi gpu
         tower_grads = []
 
-        self.train_img_set = [None] * len(self.gpu)
-        self.train_hm_set = [None]* len(self.gpu)
-        self.train_center_set = [None]* len(self.gpu)
-        self.train_scale_set = [None]* len(self.gpu)
-        self.train_name_set = [None]* len(self.gpu)
-        self.train_output_set = [None] * len(self.gpu)
-        self.totalloss = [None] * len(self.gpu)
-        self.loss_dict = [[]] * len(self.gpu)
+        # self.train_img_set = [None] * len(self.gpu)
+        # self.train_hm_set = [None]* len(self.gpu)
+        # self.train_center_set = [None]* len(self.gpu)
+        # self.train_scale_set = [None]* len(self.gpu)
+        # self.train_name_set = [None]* len(self.gpu)
+        # self.train_output_set = [None] * len(self.gpu)
+        # self.totalloss = [None] * len(self.gpu)
+        # self.loss_dict = [[]] * len(self.gpu)
+        #
+        # self.repeat = [[]] * len(self.gpu)
+        # self.trans_heatmap = [None] * len(self.gpu)
+        #
+        # self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr)
+        # self.loss = []
+        # ###define multi GPU loss
+        # flag= False
+        # with tf.variable_scope(tf.get_variable_scope()) as vscope:
+        #     for i in range(len(self.gpu)):
+        #         self.train_img_set[i], self.train_hm_set[i], self.train_center_set[i],\
+        #         self.train_scale_set[i], self.train_name_set[i] = train_data.getData()
+        #         with tf.device(("/gpu:%d" % self.gpu[i])):
+        #             with tf.name_scope('gpu_%d' % (self.gpu[i])) as scope:
+        #                 self.train_output_set[i] = self.model(self.train_img_set[i],reuse=flag)
+        #                 flag=True
+        #                 with tf.name_scope('loss'):
+        #                     with tf.device(self.cpu):
+        #                         #allloss = tf.losses.mean_squared_error(labels=self.train_heatmap,predictions=self.train_output.outputs)
+        #
+        #                         if self.celoss:
+        #
+        #                             for nsta in range(self.nstack):
+        #                                 self.repeat[i].append(self.train_hm_set[nsta])
+        #                             self.trans_heatmap[i] = tf.stack(self.repeat[i], axis=1)
+        #                             self.loss.append(tf.reduce_mean(
+        #                                 tf.nn.sigmoid_cross_entropy_with_logits(logits=self.train_output_set[i],
+        #                                                                         labels=self.trans_heatmap[i]),
+        #                                 name='cross_entropy_loss'))
+        #                         else:
+        #
+        #                             for nsta in range(len( self.train_output_set[i])):
+        #
+        #                                 self.loss_dict[i].append(tf.losses.mean_squared_error(labels=self.train_hm_set[i],
+        #                                                                                    predictions=
+        #                                                                                    self.train_output_set[i][nsta]))
+        #                             self.totalloss[i] = tf.add_n(self.loss_dict[i])
+        #
+        #                         self.loss.append(self.totalloss[i])
+        #
+        #                         with tf.name_scope('training'):
+        #                             # print(type(self.loss))
+        #                             tf.summary.scalar('loss_%d' % (i), self.loss[i], collections=['train'])
+        #                         with tf.name_scope('heatmap'):
+        #
+        #                             im = self.train_img_set[i][n, :, :, :]
+        #                             im = tf.expand_dims(im, 0)
+        #
+        #                             tf.summary.image(name=('origin_img_%d'%(i)), tensor=im, collections=['train'])
+        #                             tout = []
+        #                             tgt = []
+        #                             for joint in range(self.partnum):
+        #                                 if self.celoss:
+        #                                     hm = self.train_output_set[i][n,-1, :, :, joint]
+        #                                     tmp = self.train_output_set[i][n,-1, :, :, joint]
+        #                                 else:
+        #                                     hm = self.train_output_set[i][-1][n, :, :, joint]
+        #                                     tmp = self.train_output_set[i][-1][n, :, :, joint]
+        #                                 hm = tf.expand_dims(hm, -1)
+        #                                 hm = tf.expand_dims(hm, 0)
+        #                                 gt = self.train_hm_set[i][n, :, :, joint]
+        #
+        #                                 gt = tf.expand_dims(gt, -1)
+        #                                 gt = tf.expand_dims(gt, 0)
+        #                                 #gt = gt * 255
+        #                                 tf.summary.image('ground_truth_%s_%d' % (self.joints[joint],0), tensor=gt,
+        #                                                  collections=['train'])
+        #                                 tf.summary.image('heatmp_%s_%d' % (self.joints[joint],0), hm, collections=['train'])
+        #
+        #
+        #                                 tout.append(tf.cast(tf.equal(tf.reduce_max(tmp), tmp), tf.float32))
+        #                                 tmp2 = self.train_hm_set[i][n, :, :, joint]
+        #                                 tgt.append(tf.cast(tf.equal(tf.reduce_max(tmp2), tmp2), tf.float32))
+        #                             train_gt = tf.add_n(tgt)
+        #                             train_gt = tf.expand_dims(train_gt, 0)
+        #                             train_gt = tf.expand_dims(train_gt, -1)
+        #                             train_hm = tf.add_n(tout)
+        #                             train_hm = tf.expand_dims(train_hm, 0)
+        #                             train_hm = tf.expand_dims(train_hm, -1)
+        #                             tf.summary.image('train_ground_truth', tensor=train_gt, collections=['train'])
+        #                             tf.summary.image('train_heatmp', train_hm, collections=['train'])
+        #
+        #                 grads = self.rmsprop.compute_gradients(loss= self.loss[i])
+        #                 tower_grads.append(grads)
+        # grads_ = self.average_gradients(tower_grads)
+        # self.apply_gradient_op = self.rmsprop.apply_gradients(grads_)
 
-        self.repeat = [[]] * len(self.gpu)
-        self.trans_heatmap = [None] * len(self.gpu)
+        train_img, self.train_heatmap, self.train_center, \
+                 self.train_scale, self.train_name = train_data.getData()
+        self.train_output = self.model(train_img)
+        with tf.name_scope('heatmap'):
 
+            im = train_img[n, :, :, :]
+            im = tf.expand_dims(im, 0)
+
+            tf.summary.image(name=('origin_img'), tensor=im, collections=['train'])
+            tout = []
+            tgt = []
+            for joint in range(self.partnum):
+                if self.celoss:
+                    hm = self.train_output[n,-1, :, :, joint]
+                else:
+                    hm = self.train_output[-1][n, :, :, joint]
+                hm = tf.expand_dims(hm, -1)
+                hm = tf.expand_dims(hm, 0)
+                #hm = hm * 255
+                gt = self.train_heatmap[n, :, :, joint]
+
+                gt = tf.expand_dims(gt, -1)
+                gt = tf.expand_dims(gt, 0)
+                #gt = gt * 255
+                tf.summary.image('ground_truth_%s' % (self.joints[joint]), tensor=gt,
+                                 collections=['train'])
+                tf.summary.image('heatmp_%s_%d' % (self.joints[joint],0), hm, collections=['train'])
+                if self.celoss:
+                    tmp = self.train_output[n,-1, :, :, joint]
+                else:
+                    tmp = self.train_output[-1][n,  :, :, joint]
+                tout.append(tf.cast(tf.equal(tf.reduce_max(tmp), tmp), tf.float32))
+                tmp2 = self.train_heatmap[n, :, :, joint]
+                tgt.append(tf.cast(tf.equal(tf.reduce_max(tmp2), tmp2), tf.float32))
+            train_gt = tf.add_n(tgt)
+
+            train_gt = tf.expand_dims(train_gt, 0)
+            train_gt = tf.expand_dims(train_gt, -1)
+            train_hm = tf.add_n(tout)
+
+            train_hm = tf.expand_dims(train_hm, 0)
+            train_hm = tf.expand_dims(train_hm, -1)
+            tf.summary.image('train_ground_truth', tensor=train_gt, collections=['train'])
+            tf.summary.image('train_heatmp', train_hm, collections=['train'])
+
+
+        self.loss = 0
+        for nsta in range(len(self.train_output)):
+            self.loss += tf.losses.mean_squared_error(labels=self.train_heatmap,predictions=self.train_output[nsta])
+        if self.celoss:
+            repeat = []
+            for i in range(self.nstack):
+                repeat.append(self.train_heatmap)
+            t_heatmap = tf.stack(repeat, axis=1)
+            self.loss = tf.reduce_mean(
+                tf.nn.sigmoid_cross_entropy_with_logits(logits=self.train_output, labels=t_heatmap),
+                name='cross_entropy_loss')
+        else:
+            self.loss_dict = []
+            print(len(self.train_output))
+            for nsta in range(len(self.train_output)):
+                print(self.train_output[nsta])
+                self.loss_dict.append(tf.losses.mean_squared_error(labels=self.train_heatmap,predictions=self.train_output[nsta]))
+            self.loss = tf.add_n(self.loss_dict)
         self.rmsprop = tf.train.RMSPropOptimizer(learning_rate=self.lr)
-        self.loss = []
-        ###define multi GPU loss
-        flag= False
-        with tf.variable_scope(tf.get_variable_scope()) as vscope:
-            for i in range(len(self.gpu)):
-                self.train_img_set[i], self.train_hm_set[i], self.train_center_set[i],\
-                self.train_scale_set[i], self.train_name_set[i] = train_data.getData()
-                with tf.device(("/gpu:%d" % self.gpu[i])):
-                    with tf.name_scope('gpu_%d' % (self.gpu[i])) as scope:
-                        self.train_output_set[i] = self.model(self.train_img_set[i],reuse=flag)
-                        flag=True
-                        with tf.name_scope('loss'):
-                            with tf.device(self.cpu):
-                                #allloss = tf.losses.mean_squared_error(labels=self.train_heatmap,predictions=self.train_output.outputs)
-
-                                if self.celoss:
-
-                                    for i in range(self.nstack):
-                                        self.repeat[i].append(self.train_hm_set[i])
-                                    self.trans_heatmap[i] = tf.stack(self.repeat[i], axis=1)
-                                    self.loss.append(tf.reduce_mean(
-                                        tf.nn.sigmoid_cross_entropy_with_logits(logits=self.train_output_set[i],
-                                                                                labels=self.trans_heatmap[i]),
-                                        name='cross_entropy_loss'))
-                                else:
-
-                                    for nsta in range(len( self.train_output_set[i])):
-
-                                        self.loss_dict[i].append(tf.losses.mean_squared_error(labels=self.train_hm_set[i],
-                                                                                           predictions=
-                                                                                           self.train_output_set[i][nsta]))
-                                    self.totalloss[i] = tf.add_n(self.loss_dict[i])
-
-                                self.loss.append(self.totalloss[i])
-
-                                with tf.name_scope('training'):
-                                    # print(type(self.loss))
-                                    tf.summary.scalar('loss_%d' % (i), self.loss[i], collections=['train'])
-                                with tf.name_scope('heatmap'):
-
-                                    im = self.train_img_set[i][n, :, :, :]
-                                    im = tf.expand_dims(im, 0)
-
-                                    tf.summary.image(name=('origin_img_%d'%(i)), tensor=im, collections=['train'])
-                                    tout = []
-                                    tgt = []
-                                    for joint in range(self.partnum):
-                                        if self.celoss:
-                                            hm = self.train_output_set[i][n,-1, :, :, joint]
-                                            tmp = self.train_output_set[i][n,-1, :, :, joint]
-                                        else:
-                                            hm = self.train_output_set[i][-1][n, :, :, joint]
-                                            tmp = self.train_output_set[i][-1][n, :, :, joint]
-                                        hm = tf.expand_dims(hm, -1)
-                                        hm = tf.expand_dims(hm, 0)
-                                        gt = self.train_hm_set[i][n, :, :, joint]
-
-                                        gt = tf.expand_dims(gt, -1)
-                                        gt = tf.expand_dims(gt, 0)
-                                        #gt = gt * 255
-                                        tf.summary.image('ground_truth_%s_%d' % (self.joints[joint],0), tensor=gt,
-                                                         collections=['train'])
-                                        tf.summary.image('heatmp_%s_%d' % (self.joints[joint],0), hm, collections=['train'])
-
-
-                                        tout.append(tf.cast(tf.equal(tf.reduce_max(tmp), tmp), tf.float32))
-                                        tmp2 = self.train_hm_set[i][n, :, :, joint]
-                                        tgt.append(tf.cast(tf.equal(tf.reduce_max(tmp2), tmp2), tf.float32))
-                                    train_gt = tf.add_n(tgt)
-                                    train_gt = tf.expand_dims(train_gt, 0)
-                                    train_gt = tf.expand_dims(train_gt, -1)
-                                    train_hm = tf.add_n(tout)
-                                    train_hm = tf.expand_dims(train_hm, 0)
-                                    train_hm = tf.expand_dims(train_hm, -1)
-                                    tf.summary.image('train_ground_truth', tensor=train_gt, collections=['train'])
-                                    tf.summary.image('train_heatmp', train_hm, collections=['train'])
-
-                        grads = self.rmsprop.compute_gradients(loss= self.loss[i])
-                        tower_grads.append(grads)
-        grads_ = self.average_gradients(tower_grads)
-        self.apply_gradient_op = self.rmsprop.apply_gradients(grads_)
-
-        # with tf.name_scope('heatmap'):
-        #
-        #     im = train_img[n, :, :, :]
-        #     im = tf.expand_dims(im, 0)
-        #
-        #     tf.summary.image(name=('origin_img'), tensor=im, collections=['train'])
-        #     tout = []
-        #     tgt = []
-        #     for joint in range(self.partnum):
-        #         if self.celoss:
-        #             hm = self.train_output[n,-1, :, :, joint]
-        #         else:
-        #             hm = self.train_output[-1][n, :, :, joint]
-        #         hm = tf.expand_dims(hm, -1)
-        #         hm = tf.expand_dims(hm, 0)
-        #         #hm = hm * 255
-        #         gt = self.train_heatmap[n, :, :, joint]
-        #
-        #         gt = tf.expand_dims(gt, -1)
-        #         gt = tf.expand_dims(gt, 0)
-        #         #gt = gt * 255
-        #         tf.summary.image('ground_truth_%s' % (self.joints[joint]), tensor=gt,
-        #                          collections=['train'])
-        #         tf.summary.image('heatmp_%s_%d' % (self.joints[joint],0), hm, collections=['train'])
-        #         if self.celoss:
-        #             tmp = self.train_output[n,-1, :, :, joint]
-        #         else:
-        #             tmp = self.train_output[-1][n,  :, :, joint]
-        #         tout.append(tf.cast(tf.equal(tf.reduce_max(tmp), tmp), tf.float32))
-        #         tmp2 = self.train_heatmap[n, :, :, joint]
-        #         tgt.append(tf.cast(tf.equal(tf.reduce_max(tmp2), tmp2), tf.float32))
-        #     train_gt = tf.add_n(tgt)
-        #
-        #     train_gt = tf.expand_dims(train_gt, 0)
-        #     train_gt = tf.expand_dims(train_gt, -1)
-        #     train_hm = tf.add_n(tout)
-        #
-        #     train_hm = tf.expand_dims(train_hm, 0)
-        #     train_hm = tf.expand_dims(train_hm, -1)
-        #     tf.summary.image('train_ground_truth', tensor=train_gt, collections=['train'])
-        #     tf.summary.image('train_heatmp', train_hm, collections=['train'])
-
-
-        # self.loss = 0
-        # for nsta in range(len(self.train_output)):
-        #     self.loss += tf.losses.mean_squared_error(labels=self.train_heatmap,predictions=self.train_output[nsta])
-        # if self.celoss:
-        #     repeat = []
-        #     for i in range(self.nstack):
-        #         repeat.append(self.train_heatmap)
-        #     t_heatmap = tf.stack(repeat, axis=1)
-        #     self.loss = tf.reduce_mean(
-        #         tf.nn.sigmoid_cross_entropy_with_logits(logits=self.train_output, labels=t_heatmap),
-        #         name='cross_entropy_loss')
-        # else:
-        #     self.loss_dict = []
-        #     print(len(self.train_output))
-        #     for nsta in range(len(self.train_output)):
-        #         print(self.train_output[nsta])
-        #         self.loss_dict.append(tf.losses.mean_squared_error(labels=self.train_heatmap,predictions=self.train_output[nsta]))
-        #     self.loss = tf.add_n(self.loss_dict)
-
+        self.apply_gradient_op = self.rmsprop.minimize(self.loss)
         with tf.name_scope('training'):
             for gpus_n in range(len(self.gpu)):
 
-                tf.summary.scalar('loss %d'%gpus_n , self.loss[gpus_n], collections=['train'])
+                tf.summary.scalar('loss %d'%gpus_n , self.loss, collections=['train'])
         ######
         if self.valid_record:
             valid_data = self.valid_record
@@ -325,6 +329,20 @@ class train_class():
             #         tf.summary.scalar(self.joints[i], self.part_loss[j], collections=['train'])
             with tf.name_scope('MAE'):
                 tf.summary.scalar("MAE", self.mae, collections=['test'])
+        # if self.celoss:
+        #     self.train_coord = reverseFromHt(self.train_output_set[0][:,-1,:], nstack=self.nstack, batch_size=self.batch_size,
+        #                                      num_joint=self.partnum,
+        #                                      scale=self.train_scale_set[0], center=self.train_center_set[0], res=[64, 64])
+        #     self.valid_coord = reverseFromHt(self.valid_output[:,-1,:], nstack=self.nstack, batch_size=self.batch_size,
+        #                                      num_joint=self.partnum,
+        #                                      scale=self.valid_scale, center=self.valid_center, res=[64, 64])
+        # else:
+        #     self.train_coord =reverseFromHt(self.train_output_set[0][-1], nstack=self.nstack, batch_size=self.batch_size, num_joint=self.partnum,
+        #                                     scale=self.train_scale_set[0], center=self.train_center_set[0], res=[64, 64])
+        #
+        #     self.valid_coord = reverseFromHt(self.valid_output[-1], nstack=self.nstack, batch_size=self.batch_size,
+        #                                      num_joint=self.partnum,
+        #                                      scale=self.valid_scale, center=self.valid_center, res=[64, 64])
         if self.celoss:
             self.train_coord = reverseFromHt(self.train_output_set[0][:,-1,:], nstack=self.nstack, batch_size=self.batch_size,
                                              num_joint=self.partnum,
@@ -333,13 +351,12 @@ class train_class():
                                              num_joint=self.partnum,
                                              scale=self.valid_scale, center=self.valid_center, res=[64, 64])
         else:
-            self.train_coord =reverseFromHt(self.train_output_set[0][-1], nstack=self.nstack, batch_size=self.batch_size, num_joint=self.partnum,
-                                            scale=self.train_scale_set[0], center=self.train_center_set[0], res=[64, 64])
+            self.train_coord =reverseFromHt(self.train_output[-1], nstack=self.nstack, batch_size=self.batch_size, num_joint=self.partnum,
+                                            scale=self.train_scale, center=self.train_center, res=[64, 64])
 
             self.valid_coord = reverseFromHt(self.valid_output[-1], nstack=self.nstack, batch_size=self.batch_size,
                                              num_joint=self.partnum,
                                              scale=self.valid_scale, center=self.valid_center, res=[64, 64])
-
         self.train_merged = tf.summary.merge_all('train')
         self.valid_merge = tf.summary.merge_all('test')
 
@@ -419,7 +436,7 @@ class train_class():
 
                 if n_batch % showStep == 0:
                     _,summary,last_lr,train_coord,train_name= self.Session.run\
-                        ([self.apply_gradient_op,self.train_merged,self.lr,self.train_coord,self.train_name_set[0]],
+                        ([self.apply_gradient_op,self.train_merged,self.lr,self.train_coord,self.train_name],#self.train_name_set[0]],
                          feed_dict={self.last_learning_rate : last_lr, self.h_decay:hm_decay})
 
                     self.train_writer.add_summary(summary, epoch * n_step_epoch + n_batch)
