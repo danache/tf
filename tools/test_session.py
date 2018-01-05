@@ -18,11 +18,11 @@ network_params = process_network("./config/hourglass.cfg")
 #network_params = process_network("./config/hgattention.cfg")
 
 show_step = params["show_step"]
-test_data = DataGenerator(imgdir="/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoint_train_images_20170902/", nstack= 2,label_dir="/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoint_train_annotations_20170909.json",
-                               out_record="/media/bnrc2/_backup/dataset/new_tfrecord/test.tfrecords",num_txt="/media/bnrc2/_backup/dataset/new_tfrecord/test.txt",
-                               batch_size=1, name="train_mini", is_aug=False,isvalid=False, refine_num = 10)
+test_data = train_data = DataGenerator(imgdir=params['train_img_path'], nstack= network_params['nstack'],label_dir=params['label_dir'],
+                               out_record=params['train_record'],num_txt=params['train_num_txt'],
+                               batch_size=params['batch_size'], name="train_mini", is_aug=False,isvalid=False,scale=
+                               params['scale'])#, refine_num = 10000)
 
-img, heatmap, center, scale, img_name= test_data.getData()
 
 
 init = tf.group(tf.global_variables_initializer(),
@@ -33,24 +33,64 @@ img_idr = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoin
 
 label_tmp = pd.read_json(params["label_dir"])
 
-resume=params["resume"]
+resume="/media/bnrc2/_backup/models/0102/hourglass_8_4_base"
 
+out_predictions = dict()
+out_predictions['image_ids'] = []
+out_predictions['annos'] = dict()
+out_return_dict = dict()
+out_return_dict['error'] = None
+out_return_dict['warning'] = []
+out_return_dict['score'] = None
+anno2 = load_annotations(params["label_dir"], out_return_dict)
+
+gt_predictions = dict()
+gt_predictions['image_ids'] = []
+gt_predictions['annos'] = dict()
+gt_return_dict = dict()
+gt_return_dict['error'] = None
+gt_return_dict['warning'] = []
+gt_return_dict['score'] = None
+anno_gt = load_annotations(params["label_dir"], gt_return_dict)
+
+
+
+
+img, heatmap, center, scale, img_name= test_data.getData()
+
+model = HourglassModel(nFeats=network_params['nfeats'], nStack=network_params['nstack'],
+                           nModules=network_params['nmodules'],outputDim=network_params['partnum'],CELOSS=True,training=False)._graph_hourglass
+output = model(img)
+
+train_coord = reverseFromHt(output[:,-1,:], nstack=network_params['nstack'], batch_size=16,
+                                             num_joint=14,
+                                             scale=scale, center=center, res=[64, 64])
+gt_coord = reverseFromHt(heatmap, nstack=network_params['nstack'], batch_size=16,
+                                             num_joint=14,
+                                             scale=scale, center=center, res=[64, 64])
 with tf.Session() as sess:
     sess.run(init)
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(coord=coord, sess=sess)
 
-    # model = HourglassModel(nFeat=network_params['nfeats'], nStack=network_params['nstack'],
-    #                        nModules=network_params['nmodules'], outputDim=network_params['partnum'])._graph_hourglass
-    # output = model(img, reuse=False).outputs
-    sess.run(init)
-    # saver = tf.train.Saver()
-    # saver.restore(sess,resume)
 
-    for i in range(20):
-        train_img, train_ht, train_center, train_scale,train_name, = sess.run(
-            [img, heatmap, center, scale, img_name], )
-        train_out = sess.run(output)
+    sess.run(init)
+    saver = tf.train.Saver()
+    saver.restore(sess,resume)
+
+
+    for i in range(100):
+        coord, gt_cood,train_name = sess.run([train_coord,gt_coord, img_name],
+             )
+
+        gt_predictions = getjointcoord(gt_cood, train_name, gt_predictions)
+        out_predictions = getjointcoord(coord, train_name, out_predictions)
+
+        outscore = getScore(out_predictions, anno2, out_return_dict)
+        print(outscore)
+        outgt = getScore(gt_predictions, anno_gt, gt_return_dict)
+        print(outgt)
+
         #
         # predictions = dict()
         # predictions['image_ids'] = []
@@ -66,18 +106,6 @@ with tf.Session() as sess:
         # score = getScore(predictions, anno, return_dict)
         # print("gt score = ")
         # print(score)
-        out_predictions = dict()
-        out_predictions['image_ids'] = []
-        out_predictions['annos'] = dict()
-        out_return_dict = dict()
-        out_return_dict['error'] = None
-        out_return_dict['warning'] = []
-        out_return_dict['score'] = None
-        anno2 = load_annotations(params["label_dir"], out_return_dict)
-        out_predictions = getjointcoord(train_out, train_center, train_scale,train_name, out_predictions)
-        outscore = getScore(out_predictions, anno2, out_return_dict)
-        print("predscore = ")
-        print(outscore)
     # try:
     #     sess.run(init)
     #     step = 0

@@ -4,12 +4,10 @@ import cv2
 #img_dir = "/media/bnrc2/_backup/ai/ai_challenger_keypoint_train_20170902/keypoint_train_images_20170902/"
 def getjointcoord(coord, img_name,predictions,thresh=0):
 
-
     for batch in range(coord.shape[0]):
         res = np.zeros([14,3])
         hm = np.squeeze(coord[batch,:])
         for joint in range(14):
-
             res[joint][0] = hm[joint][0]
             res[joint][1] = hm[joint][1]
             res[joint][2] = 0

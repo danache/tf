@@ -7,7 +7,7 @@ from four_stack.Hourglass import HourglassModel
 from train_class import train_class
 
 import os
-#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 def process_config(conf_file):
     params = {}
     config = configparser.ConfigParser()
@@ -68,7 +68,7 @@ if __name__ == '__main__':
 
 
     model = HourglassModel(nFeats=network_params['nfeats'], nStack=network_params['nstack'],
-                           nModules=network_params['nmodules'],outputDim=network_params['partnum'])._graph_hourglass
+                           nModules=network_params['nmodules'],outputDim=network_params['partnum'],CELOSS=False)._graph_hourglass
 
     # model = HGattention(nFeat=network_params['nfeats'], nStack=network_params['nstack'],
     #                     nModules=network_params['nmodules'],outputDim=network_params['partnum'],
@@ -82,7 +82,7 @@ if __name__ == '__main__':
                               save_model_dir=params['model_save_path'],
                               resume=params['resume'],#/media/bnrc2/_backup/golf/model/tiny_hourglass_21
                               gpu=params['gpus'],partnum=network_params['partnum'],train_label=params['label_dir'],
-                              val_label=params['valid_label'],human_decay=params['human_decay'],
+                              val_label=params['valid_label'],human_decay=params['human_decay'],CELOSS=False
                      )
         trainer.generateModel()
         trainer.training_init(nEpochs=params['nepochs'],valStep=params['val_step'],showStep=show_step )
