@@ -15,6 +15,7 @@ class HourglassModel():
         self.training = training
         self.nLow = nLow
         self.CELoss = CELOSS
+        self.dropout_rate=0.2
     # def _hourglass(self, inputs, n, numOut, name='hourglass'):
     #     """ Hourglass Module
     #     Args:
@@ -82,6 +83,7 @@ class HourglassModel():
             ll = [None] * self.nStack
             ll_ = [None] * self.nStack
             res = [[None] * self.nModules] * self.nStack
+            drop = [None] * self.nStack
             out = [None] * self.nStack
             out_ = [None] * self.nStack
             sum_ = [None] * self.nStack
@@ -93,7 +95,9 @@ class HourglassModel():
                     # for mod in range(1,self.nModules):
                     #     res[0][mod] = Residual(res[0][mod - 1], self.nFeats,name="res%d" % mod)
                     # ll[0] = self._conv_bn_relu(res[0][self.nModules - 1], self.nFeats, 1, 1, 'VALID', name='conv')
-                    ll[0] = self._conv_bn_relu(hg[0], self.nFeats, 1, 1, 'VALID', name='conv0',reuse=reuse)
+                    # ll[0] = self._conv_bn_relu(hg[0], self.nFeats, 1, 1, 'VALID', name='conv0',reuse=reuse)
+                    drop[0] = tf.layers.dropout(hg[0], rate=self.dropout_rate, training=self.training, name='dropout')
+                    ll[0] = self._conv_bn_relu(drop[0], self.nFeats, 1, 1, 'VALID', name='conv',reuse=reuse)
                     ll_[0] = self._conv(ll[0], self.nFeats, 1, 1, 'VALID', 'll0',reuse=reuse)
 
                     out[0] = self._conv(ll[0], self.partnum, 1, 1, 'VALID', name = 'out0',reuse=reuse)
@@ -101,28 +105,36 @@ class HourglassModel():
                     sum_[0] = tf.add_n([out_[0], r3, ll_[0]], name='merge0')
 
                 for i in range(1, self.nStack - 1):
-                    with tf.name_scope('stage_' + str(i)):
-                        hg[i] = self._hourglass(sum_[i - 1], self.nLow, self.nFeats, 'hourglass',reuse=reuse)
-                        # res[i][0] = Residual(hg[i], self.nFeats, name="res0")
+                    with tf.variable_scope('stage_' + str(i), reuse=reuse):
+                        with tf.name_scope('stage_' + str(i)):
+                            hg[i] = self._hourglass(sum_[i - 1], self.nLow, self.nFeats, 'hourglass',reuse=reuse)
+                            # res[i][0] = Residual(hg[i], self.nFeats, name="res0")
+                            # for mod in range(1, self.nModules):
+                            #     res[i][mod] = Residual(res[i][mod - 1], self.nFeats, name="res%d" % mod)
+                            # ll[i] = self._conv_bn_relu(res[i][self.nModules - 1], self.nFeats, 1, 1, 'VALID', name='conv')
+                            ll[i] = self._conv_bn_relu(hg[i], self.nFeats, 1, 1, 'VALID', name='conv',reuse=reuse)
+                            # drop[i] = tf.layers.dropout(hg[i], rate=self.dropout_rate, training=self.training,
+                            #                             name='dropout',reuse=reuse)
+                            # ll[i] = self._conv_bn_relu(hg[i], self.nFeats, 1, 1, 'VALID', name='conv',reuse=reuse)
+                            ll_[i] = self._conv(ll[i], self.nFeats, 1, 1, 'VALID', 'll',reuse=reuse)
+
+                            out[i] = self._conv(ll[i], self.partnum, 1, 1, 'VALID', name = 'out',reuse=reuse)
+                            out_[i] = self._conv(out[i], self.nFeats, 1, 1, 'VALID', 'out_',reuse=reuse)
+                            sum_[i] = tf.add_n([out_[i],  [i - 1], ll_[i]], name='merge')
+                with tf.variable_scope('stage_' + str(self.nStack - 1), reuse=reuse):
+                    with tf.name_scope('stage_' + str(self.nStack - 1)):
+                        hg[self.nStack - 1] = self._hourglass(sum_[self.nStack - 2], self.nLow, self.nFeats, 'hourglass',reuse=reuse)
+                        # res[self.nStack - 1][0] = Residual(hg[self.nStack - 1], self.nFeats)
                         # for mod in range(1, self.nModules):
-                        #     res[i][mod] = Residual(res[i][mod - 1], self.nFeats, name="res%d" % mod)
-                        # ll[i] = self._conv_bn_relu(res[i][self.nModules - 1], self.nFeats, 1, 1, 'VALID', name='conv')
-                        ll[i] = self._conv_bn_relu(hg[i], self.nFeats, 1, 1, 'VALID', name='conv',reuse=reuse)
-                        ll_[i] = self._conv(ll[i], self.nFeats, 1, 1, 'VALID', 'll',reuse=reuse)
+                        #     res[self.nStack - 1][mod] = Residual(res[self.nStack - 1][mod - 1], self.nFeats, name="res%d" % mod)
+                        #
+                        # ll[self.nStack - 1] = self._conv_bn_relu(res[self.nStack - 1][self.nModules - 1], self.nFeats, 1, 1, 'VALID', 'conv')
+                        # ll[self.nStack - 1] = self._conv_bn_relu(hg[self.nStack - 1], self.nFeats, 1, 1, 'VALID', 'conv',reuse=reuse)
+                        drop[self.nStack - 1] = tf.layers.dropout(hg[self.nStack - 1], rate=self.dropout_rate,
+                                                                  training=self.training, name='dropout')
+                        ll[self.nStack - 1] = self._conv_bn_relu(drop[self.nStack - 1], self.nFeats, 1, 1, 'VALID', 'conv',reuse=reuse)
 
-                        out[i] = self._conv(ll[i], self.partnum, 1, 1, 'VALID', name = 'out',reuse=reuse)
-                        out_[i] = self._conv(out[i], self.nFeats, 1, 1, 'VALID', 'out_',reuse=reuse)
-                        sum_[i] = tf.add_n([out_[i], sum_[i - 1], ll_[i]], name='merge')
-                with tf.name_scope('stage_' + str(self.nStack - 1)):
-                    hg[self.nStack - 1] = self._hourglass(sum_[self.nStack - 2], self.nLow, self.nFeats, 'hourglass',reuse=reuse)
-                    # res[self.nStack - 1][0] = Residual(hg[self.nStack - 1], self.nFeats)
-                    # for mod in range(1, self.nModules):
-                    #     res[self.nStack - 1][mod] = Residual(res[self.nStack - 1][mod - 1], self.nFeats, name="res%d" % mod)
-                    #
-                    # ll[self.nStack - 1] = self._conv_bn_relu(res[self.nStack - 1][self.nModules - 1], self.nFeats, 1, 1, 'VALID', 'conv')
-                    ll[self.nStack - 1] = self._conv_bn_relu(hg[self.nStack - 1], self.nFeats, 1, 1, 'VALID', 'conv',reuse=reuse)
-
-                    out[self.nStack - 1] = self._conv(ll[self.nStack - 1], self.partnum, 1, 1, 'VALID', 'out',reuse=reuse)
+                        out[self.nStack - 1] = self._conv(ll[self.nStack - 1], self.partnum, 1, 1, 'VALID', 'out',reuse=reuse)
             if self.CELoss:
                 return tf.stack(out, axis= 1 , name = 'final_output')
             else:

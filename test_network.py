@@ -22,7 +22,7 @@ with tf.name_scope('training'):
 train_merged = tf.summary.merge_all('train')
 init = tf.group(tf.global_variables_initializer(),
                 tf.local_variables_initializer())
-train_merged = tf.summary.merge_all('train')
+
 sess.run(init)
 
 b ,c= sess.run([output,train_merged],feed_dict={a:np.random.random_sample([1,256,256,3])})

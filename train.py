@@ -3,9 +3,9 @@ import time
 import configparser
 from dataGenerator.datagen_v2 import DataGenerator
 import tensorflow as tf
-from four_stack.Hourglass import HourglassModel
+#from four_stack.Hourglass import HourglassModel
 from train_class import train_class
-
+from four_stack.ian_hourglass import hourglassnet
 import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 def process_config(conf_file):
@@ -67,9 +67,9 @@ if __name__ == '__main__':
 
 
 
-    model = HourglassModel(nFeats=network_params['nfeats'], nStack=network_params['nstack'],
-                           nModules=network_params['nmodules'],outputDim=network_params['partnum'],CELOSS=False)._graph_hourglass
-
+    # model = HourglassModel(nFeats=network_params['nfeats'], nStack=network_params['nstack'],
+    #                        nModules=network_params['nmodules'],outputDim=network_params['partnum'],CELOSS=False)._graph_hourglass
+    model = hourglassnet()
     # model = HGattention(nFeat=network_params['nfeats'], nStack=network_params['nstack'],
     #                     nModules=network_params['nmodules'],outputDim=network_params['partnum'],
     #                     npool=network_params['npool'], lrnker=network_params['lrnker']).createModel

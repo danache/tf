@@ -207,7 +207,7 @@ class train_class():
 
         train_img, self.train_heatmap, self.train_center, \
                  self.train_scale, self.train_name = train_data.getData()
-        self.train_output = self.model(train_img)
+        self.train_output = self.model.build(train_img)
         with tf.name_scope('heatmap'):
 
             im = train_img[n, :, :, :]
@@ -283,7 +283,7 @@ class train_class():
             self.valid_num = valid_data.getN()
             self.validIter = int(self.valid_num / self.batch_size)
             #self.valid_output = self._graph_hourglass(self.valid_img)
-            self.valid_output = self.model(self.valid_img,reuse=True)
+            self.valid_output = self.model.build(self.valid_img,reuse=True)
 
             generate_valid_done_time = time.time()
             print('train data generate in ' + str(int(generate_valid_done_time - generate_train_done_time )) + ' sec.')
