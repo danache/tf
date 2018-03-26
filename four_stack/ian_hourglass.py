@@ -89,6 +89,9 @@ class hourglassnet(object):
         #inputs = tf.placeholder(tf.float32, [8, 256, 256, 3], name='inputs')
         outs = self.net(inputs,reuse=reuse)
         return outs
+    '''
+    生成网络
+    '''
 
     def net(self, inputs, reuse=None):
         with tf.variable_scope(name_or_scope='net', reuse=reuse):
@@ -104,7 +107,7 @@ class hourglassnet(object):
                 pool1 = tf.contrib.layers.max_pool2d(r1, [2, 2], [2, 2], padding='VALID')
                 # Dim pool1 : nbImages x 64 x 64 x 128
 
-                r2 = self._bottleneck(pool1, channels=128, name='r2', reuse=reuse)
+                r2 = self._bottleneck(pool1, channels=64, name='r2', reuse=reuse)
                 r3 = self._bottleneck(r2, channels=128, name='r3', reuse=reuse)
             out = []
             with tf.variable_scope(name_or_scope='stacks', reuse=reuse):

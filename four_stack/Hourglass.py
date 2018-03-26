@@ -16,45 +16,45 @@ class HourglassModel():
         self.nLow = nLow
         self.CELoss = CELOSS
         self.dropout_rate=0.2
-    # def _hourglass(self, inputs, n, numOut, name='hourglass'):
-    #     """ Hourglass Module
-    #     Args:
-    #         inputs	: Input Tensor
-    #         n		: Number of downsampling step
-    #         numOut	: Number of Output Features (channels)
-    #         name	: Name of the block
-    #     """
-    #     with tf.name_scope(name):
-    #         # Upper Branch
-    #         up = [None] * self.nModules
-    #
-    #         up[0] = Residual(inputs, numOut, name='up_0')
-    #         for i in range(1,self.nModules):
-    #             up[i] = Residual(up[i - 1], numOut, name='up_%d' % i)
-    #         # Lower Branch
-    #         low_ = tf.contrib.layers.max_pool2d(inputs, [2, 2], [2, 2], padding='VALID')
-    #         low1 = [None] * self.nModules
-    #         low1[0] = Residual(low_, numOut, name='low_0')
-    #         for j in range(1,self.nModules):
-    #             low1[j] = Residual(low1[j - 1], numOut, name='low_%d' % j)
-    #
-    #
-    #         if n > 0:
-    #             low2 = [None]
-    #             low2[0] = self._hourglass(low1[self.nModules - 1], n - 1, numOut, name='low_2')
-    #         else:
-    #             low2 = [None] * self.nModules
-    #             low2[0] = Residual(low1[self.nModules - 1], numOut, name='low2_0')
-    #             for k in range(1, self.nModules):
-    #                 low2[k] = Residual(low2[k - 1], numOut, name='low2_%d' % k)
-    #
-    #         low3 = [None] * self.nModules
-    #         low3[0] = Residual(low2[-1], numOut, name='low_3_0')
-    #         for p in range(1,self.nModules):
-    #             low3[p] = Residual(low3[p - 1], numOut, name='low3_%d' % j)
-    #         up_2 = tf.image.resize_nearest_neighbor(low3[-1], tf.shape(low3[-1])[1:3] * 2, name='upsampling')
-    #
-    #         return tf.add_n([up_2, up[-1]], name='out_hg')
+    def _hourglass(self, inputs, n, numOut, name='hourglass'):
+        """ Hourglass Module
+        Args:
+            inputs	: Input Tensor
+            n		: Number of downsampling step
+            numOut	: Number of Output Features (channels)
+            name	: Name of the block
+        """
+        with tf.name_scope(name):
+            # Upper Branch
+            up = [None] * self.nModules
+
+            up[0] = Residual(inputs, numOut, name='up_0')
+            for i in range(1,self.nModules):
+                up[i] = Residual(up[i - 1], numOut, name='up_%d' % i)
+            # Lower Branch
+            low_ = tf.contrib.layers.max_pool2d(inputs, [2, 2], [2, 2], padding='VALID')
+            low1 = [None] * self.nModules
+            low1[0] = Residual(low_, numOut, name='low_0')
+            for j in range(1,self.nModules):
+                low1[j] = Residual(low1[j - 1], numOut, name='low_%d' % j)
+
+
+            if n > 0:
+                low2 = [None]
+                low2[0] = self._hourglass(low1[self.nModules - 1], n - 1, numOut, name='low_2')
+            else:
+                low2 = [None] * self.nModules
+                low2[0] = Residual(low1[self.nModules - 1], numOut, name='low2_0')
+                for k in range(1, self.nModules):
+                    low2[k] = Residual(low2[k - 1], numOut, name='low2_%d' % k)
+
+            low3 = [None] * self.nModules
+            low3[0] = Residual(low2[-1], numOut, name='low_3_0')
+            for p in range(1,self.nModules):
+                low3[p] = Residual(low3[p - 1], numOut, name='low3_%d' % j)
+            up_2 = tf.image.resize_nearest_neighbor(low3[-1], tf.shape(low3[-1])[1:3] * 2, name='upsampling')
+
+            return tf.add_n([up_2, up[-1]], name='out_hg')
 
 
 

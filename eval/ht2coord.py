@@ -14,7 +14,7 @@ def getjointcoord(coord, img_name,predictions,thresh=0):
 
 
 
-        name = img_name[batch].decode("utf-8")
+        name = img_name[batch]
         #
         # img_path = os.path.join(img_dir, name + ".jpg")
         # img = cv2.imread(img_path)
